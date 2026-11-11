@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 额度看板连接器</title>
+<link rel="stylesheet" href="popup.css">
+<body>
+  <main>
+    <div class="eyebrow">AI 额度看板</div>
+    <h1>Chrome 连接器</h1>
+    <div class="status" id="status" role="status">正在检查本机连接…</div>
+    <p>使用当前 Chrome 个人资料中，Cursor 网页已登录的账号。</p>
+    <p class="muted">只查询额度并传给本机看板，零模型调用。需要时会在现有窗口保留一个后台用量页；Chrome 关闭后暂停更新。</p>
+    <div class="actions">
+      <button id="account" type="button">打开官方账户页</button>
+      <button id="reconnect" class="secondary" type="button">重新连接</button>
+    </div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

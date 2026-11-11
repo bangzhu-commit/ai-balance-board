@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "AI 额度看板 · Chrome 连接器",
+  "version": "0.1.0",
+  "description": "通过当前 Chrome 的 Cursor 登录会话，只读查询 Grok Bot 额度并发送给本机 AI 额度看板。",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA646zy5xldBfDIpl10VMjlgmq422esXCODFPtZbFJbFp3XbVBkUjdZQml8qTzkkOdsv7QU1B1mbbfWDWb8odApr0ZYz9IwHPnF+wD4u688rBYhLV0ZEHgdYylLlfEFuGRVK5Q7GvgQFiBzB8OYoREGGo9qseSa39hKbslaxzGwptSjgg7wp9EMEP1RMj27J74dFHVCXWj8zLPrvF4kiOrdmVx8mV1gZOZsVmaCjyNz1k8KQ//Z/fjvcRnFmPv858oSDF+IdyVi+jK5ov04f69vZDUjHfcjXhdSas39ccWo9J7K6ZQdvQKaSkfKqhZ/O/f+KIkhSt9uJILWtXWP9Pv+QIDAQAB",
+  "permissions": ["nativeMessaging", "storage", "alarms"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://cursor.com/dashboard*"],
+    "js": ["protocol.js", "content.js"],
+    "run_at": "document_idle",
+    "all_frames": false,
+    "world": "ISOLATED"
+  }],
+  "action": {
+    "default_title": "AI 额度看板连接状态",
+    "default_popup": "popup.html"
+  },
+  "incognito": "not_allowed"
+}

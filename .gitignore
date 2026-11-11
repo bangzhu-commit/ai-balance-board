@@ -1,0 +1,14 @@
+.build/
+.build-*/
+dist/
+.DS_Store
+*.log
+release/
+__pycache__/
+*.py[cod]
+.remember/
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision

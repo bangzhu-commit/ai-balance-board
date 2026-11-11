@@ -1,0 +1,34 @@
+name: Offline checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Require Apple Silicon toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          swiftc --version
+      - name: Build app without starting it
+        run: ./scripts/build.sh
+      - name: Offline Swift and extension checks
+        run: |
+          ./scripts/test.sh
+          node --test browser-extension/tests/extension.test.mjs
+          python3 scripts/test-browser-bridge.py
+          python3 scripts/test-browser-client.py
+          bash scripts/check-login-item.sh
+          zsh scripts/test-codex-provider.sh
+          zsh scripts/test-setup-integration.sh
+          zsh scripts/test-store.sh
+      - name: Validate package contents and checksums locally
+        run: python3 scripts/package-preview.py
