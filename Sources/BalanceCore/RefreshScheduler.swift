@@ -37,6 +37,17 @@ public struct RefreshScheduler: Sendable {
         self.maxDebounce = maxDebounce
     }
 
+    /// A successful foreground connection test already supplied a current reading.
+    /// Adopting it must not immediately issue an identical background query.
+    @discardableResult
+    public mutating func seedFreshReading(at now: TimeInterval) -> Bool {
+        guard now.isFinite, !isRunning else { return false }
+        startupRequested = true; hasBegunRun = true; consecutiveFailures = 0
+        pendingAt = nil; burstStartedAt = nil; settlingUntil = nil
+        nextPeriodicAt = now + interval
+        return true
+    }
+
     /// Nil means the owner must not create a timer, including during an active run.
     public var nextDueAt: TimeInterval? {
         guard !isRunning, network == .online else { return nil }

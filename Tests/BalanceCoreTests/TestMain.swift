@@ -61,6 +61,17 @@ enum TestMain {
         TestResults.run("设置：旧版迁移且尊重明确的空选择") { preferences.testLegacyMigrationAndExplicitEmptySelectionAreStable() }
         TestResults.run("设置：服务选择持久化且忽略未知服务") { preferences.testSelectionPersistsAndUnknownServicesDoNotEnableAnything() }
 
+        let custom = CustomSiteTests()
+        TestResults.run("自定义：严格配置与缺省字段") { try custom.testStrictSchemaAndDefaults() }
+        TestResults.run("自定义：域名路径与选择器边界") { try custom.testRestrictedOriginsPathsAndSelectors() }
+        TestResults.run("自定义：JSON单位换算与已用转剩余") { try custom.testJSONValuesUnitsAndRemaining() }
+        TestResults.run("自定义：异常数据不变成零") { try custom.testInvalidDataNeverBecomesZero() }
+        TestResults.run("自定义：百分比口径边界与超额") { try custom.testPercentSemanticsPreserveOverage() }
+        TestResults.run("自定义：网页严格数值与前后缀") { try custom.testDOMRequiresExactNumericText() }
+        TestResults.run("自定义：旧服务标识编码兼容") { try custom.testServiceIdentifierCompatibility() }
+        TestResults.run("自定义：本机持久化与失败处理") { try custom.testRepositoryPersistenceAndErrors() }
+        TestResults.run("自定义：动态调度补查及首次测试去重") { try custom.testDynamicSchedulesAndFreshTestAdoption() }
+
         TestResults.printSummary()
         exit(TestResults.failures.isEmpty ? EXIT_SUCCESS : EXIT_FAILURE)
     }

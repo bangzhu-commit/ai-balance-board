@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "网页额度示例（请修改）",
+  "origin": "https://relay.example.com",
+  "loginPath": "/login",
+  "pagePath": "/dashboard",
+  "mode": "dom",
+  "metrics": [
+    { "id": "remaining", "label": "剩余比例", "unit": "%", "meaning": "remaining", "value": "#remaining", "suffix": "%" }
+  ]
+}

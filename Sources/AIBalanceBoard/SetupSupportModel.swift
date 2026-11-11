@@ -112,8 +112,9 @@ final class SetupSupportModel: ObservableObject {
 
     func exportDiagnostics(store: BalanceStore) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-        let serviceLines = store.cards.map { card in
-            "\(card.id.rawValue): enabled=\(store.enabledServices.contains(card.id)), state=\(card.connectionState.rawValue), hasReading=\(card.reading != nil)"
+        let serviceLines = store.cards.enumerated().map { index, card in
+            let identifier = card.id.customUUID == nil ? card.id.rawValue : "custom-site-\(index + 1)"
+            return "\(identifier): enabled=\(store.enabledServices.contains(card.id)), state=\(card.connectionState.rawValue), hasReading=\(card.reading != nil)"
         }
         let report = (["AI Balance Board \(version)", "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)", "Chrome installed: \(chromeInstalled)", "Native bridge registered: \(bridgeRegistered)", "Extension connected: \(bridgeConnected)", "Codex found: \(codexPath != nil)", "Login item enabled: \(loginEnabled)", "No account identifiers, balances, paths, cookies or tokens are included."] + serviceLines).joined(separator: "\n") + "\n"
         let panel = NSSavePanel(); panel.nameFieldStringValue = "ai-balance-board-diagnostics.txt"

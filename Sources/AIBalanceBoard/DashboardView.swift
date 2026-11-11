@@ -118,6 +118,7 @@ private struct QuotaCardView: View {
         case .foxcode: return Color(red: 0.76, green: 0.39, blue: 0.27)
         case .codex: return Color(red: 0.22, green: 0.48, blue: 0.41)
         case .grok: return Color(red: 0.33, green: 0.38, blue: 0.49)
+        default: return Color(red: 0.34, green: 0.42, blue: 0.60)
         }
     }
 
@@ -126,6 +127,7 @@ private struct QuotaCardView: View {
         case .foxcode: return "bolt.fill"
         case .codex: return "terminal"
         case .grok: return "sparkle"
+        default: return "globe"
         }
     }
 

@@ -2,11 +2,11 @@
 
 macOS 桌面悬浮看板，集中查看 AI 工具的最近额度。后台按约 5 分钟刷新，登录、唤醒和网络恢复后合并补查；查询不调用模型，不消耗模型推理 token。
 
-**[下载 Mac 应用 v0.4.0](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.4.0/AI-Balance-Board-0.4.0-macos-arm64.zip)** · [版本详情](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.4.0) · [SHA256 校验文件](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.4.0/SHA256SUMS.txt)
+**[下载 Mac 应用 v0.5.0](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.5.0/AI-Balance-Board-0.5.0-macos-arm64.zip)** · [版本详情](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.5.0) · [SHA256 校验文件](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.5.0/SHA256SUMS.txt)
 
 **普通用户请选择上方应用 ZIP，不要下载 GitHub 的 “Source code”。** 仅支持 Apple Silicon（M 系列芯片）、macOS 14 或更新版本，不支持 Intel Mac。
 
-v0.4.0 为预览版。应用使用 ad-hoc 签名，尚无 Developer ID 签名、公证或自动更新；macOS 可能阻止打开下载包。首次提示“无法验证开发者”时，确认下载来源及校验值后，可按[首次拦截处理步骤](docs/installation.md#首次打开被-macos-拦截)在系统设置中为这个 app 授权；若提示损坏或恶意软件，请停止安装。不要关闭 Gatekeeper 等系统防护。项目采用 [MIT License](LICENSE)。
+v0.5.0 为预览版。应用使用 ad-hoc 签名，尚无 Developer ID 签名、公证或自动更新；macOS 可能阻止打开下载包。首次提示“无法验证开发者”时，确认下载来源及校验值后，可按[首次拦截处理步骤](docs/installation.md#首次打开被-macos-拦截)在系统设置中为这个 app 授权；若提示损坏或恶意软件，请停止安装。不要关闭 Gatekeeper 等系统防护。项目采用 [MIT License](LICENSE)。
 
 ## 新用户：下载与开始
 
@@ -21,11 +21,23 @@ v0.4.0 为预览版。应用使用 ad-hoc 签名，尚无 Developer ID 签名、
 
 | 服务 | 当前接入范围 | 使用前准备 |
 | --- | --- | --- |
-| 中转站 | 当前内置适配的服务，暂不支持自定义站点 | 在看板自己的登录窗口登录 |
+| 中转站 | 内置适配，或导入自定义站点配置 | 在看板自己的登录窗口登录 |
 | Codex | ChatGPT 套餐额度 | 安装并登录 Codex CLI；按设置页检测结果处理 |
 | Grok Bot | 当前 Chrome Cursor 账号的 Grok Bot 额度 | Chrome 120+、登录对应 Cursor 账号、安装本机连接器 |
 
-WorkBuddy、千问办公、Qoder、其他中转站及通用 Cursor 卡片**尚未接入**。当前不是任意网站额度抓取器，也不能混用不同平台额度单位。
+自定义站点可导入同源只读 JSON 接口或固定网页元素规则，需逐站测试与核对；不能只填网址就自动识别。WorkBuddy、千问办公、Qoder 及通用 Cursor 卡片**没有内置适配**，也不代表能用自定义规则接入所有服务。不同平台的额度单位分别显示。
+
+## 自定义站点：添加、导入与测试
+
+1. 在“服务与设置”的选择或连接页点击 **添加站点**，填写显示名称与 HTTPS 站点地址。
+2. 点击 **复制给 Agent 的接入任务**，交给具有浏览器 / Computer Use 能力的 Codex、WorkBuddy 等 Agent；由你本人登录，Agent 按规范生成配置。已有配置可跳过这一步。
+3. 粘贴或导入 JSON，点击 **检查配置**，核对域名和指标，再保存。保存不会自动查询。
+4. 打开该站点的登录窗口并登录，点击 **测试连接**，把金额、单位、已用 / 剩余含义与网页对照。
+5. 勾选核对确认，点击 **确认并开启自动查询**。后续约 5 分钟查询一次，不调用模型；唤醒、联网恢复后合并补查。
+
+首次 Agent 分析与以后修复会使用所选 Agent 的额度。看板只执行固定读取规则，不在后台调用 Agent。每站点独立保存登录会话；改配置后必须重新测试。最多保存 12 个自定义站点。
+
+[完整接入与配置规范](docs/custom-sites.md) · [给 Agent 的接入指引](docs/agent-site-onboarding.md) · [JSON 示例](examples/custom-sites/json-example.json) · [网页元素示例](examples/custom-sites/dom-example.json)
 
 ## Grok Bot：首次连接
 
@@ -55,6 +67,8 @@ WorkBuddy、千问办公、Qoder、其他中转站及通用 Cursor 卡片**尚�
 ./scripts/build.sh
 ./scripts/test.sh
 node --test browser-extension/tests/extension.test.mjs
+zsh scripts/test-custom-site-provider.sh
+zsh scripts/test-custom-site-webkit.sh
 python3 scripts/test-browser-bridge.py
 python3 scripts/test-browser-client.py
 bash scripts/check-login-item.sh

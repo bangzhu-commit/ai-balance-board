@@ -12,3 +12,8 @@ __pycache__/
 *.pem
 *.p12
 *.mobileprovision
+
+# Per-user custom-site configurations (examples/ contains synthetic templates only).
+custom-sites.json
+*.site.local.json
+*.p8

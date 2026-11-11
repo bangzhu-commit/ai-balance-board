@@ -1,6 +1,32 @@
 import Foundation
 
-public enum ServiceID: String, Codable, CaseIterable, Sendable { case foxcode, codex, grok }
+/// Preserves the original string encoding while allowing locally configured sites.
+public struct ServiceID: RawRepresentable, Hashable, Codable, CaseIterable, Sendable {
+    public let rawValue: String
+    public static let foxcode = ServiceID(unchecked: "foxcode")
+    public static let codex = ServiceID(unchecked: "codex")
+    public static let grok = ServiceID(unchecked: "grok")
+    public static let allCases: [ServiceID] = [.foxcode, .codex, .grok]
+
+    private init(unchecked: String) { rawValue = unchecked }
+    public init?(rawValue: String) {
+        if Self.allCases.contains(where: { $0.rawValue == rawValue }) { self.rawValue = rawValue; return }
+        guard rawValue.hasPrefix("custom:"), let id = UUID(uuidString: String(rawValue.dropFirst(7))),
+              id != UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)) else { return nil }
+        self.rawValue = "custom:" + id.uuidString.lowercased()
+    }
+    public static func custom(_ id: UUID) -> ServiceID { ServiceID(unchecked: "custom:" + id.uuidString.lowercased()) }
+    public var customUUID: UUID? { rawValue.hasPrefix("custom:") ? UUID(uuidString: String(rawValue.dropFirst(7))) : nil }
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.singleValueContainer()
+        let raw = try box.decode(String.self)
+        guard let value = Self(rawValue: raw) else { throw DecodingError.dataCorruptedError(in: box, debugDescription: "Unknown service identifier") }
+        self = value
+    }
+    public func encode(to encoder: Encoder) throws {
+        var box = encoder.singleValueContainer(); try box.encode(rawValue)
+    }
+}
 
 public enum ServiceConnectionState: String, Codable, Sendable {
     case notConfigured, ready, authenticationRequired, dependencyMissing

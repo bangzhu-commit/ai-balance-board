@@ -91,17 +91,18 @@ struct SetupView: View {
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            Text("当前支持以上三项。WorkBuddy、千问办公、Qoder、独立 Cursor 额度及其他中转站尚未接入。")
+            Text("以上为内置连接。其他网站可在下方导入经过适配的读取配置；需要逐站测试，不能保证任意平台都可自动查询。")
                 .font(.footnote).foregroundStyle(.secondary)
+            CustomSitesView(store: store)
         }
     }
 
     private var connections: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if store.enabledServices.isEmpty {
+            if store.enabledServices.isEmpty && store.customSites.isEmpty {
                 Text("还没有选择服务。回到第 1 步开启一项，或选择“稍后设置”。")
             }
-            ForEach(store.visibleCards) { card in
+            ForEach(store.visibleCards.filter { ServiceID.allCases.contains($0.id) }) { card in
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
@@ -129,14 +130,15 @@ struct SetupView: View {
                     }.padding(8)
                 }
             }
+            CustomSitesView(store: store)
         }
     }
 
     private var foxConnection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("在看板的独立登录窗口中登录 FoxCode。登录成功并读取到额度后，点击“返回看板”。")
+            Text("在看板的独立登录窗口中登录内置适配的中转站。登录成功并读取到额度后，点击“返回看板”。")
                 .font(.callout).foregroundStyle(.secondary)
-            Button("打开 FoxCode 登录") { store.connect(.foxcode) }
+            Button("打开中转站登录") { store.connect(.foxcode) }
         }
     }
 
@@ -227,13 +229,19 @@ struct SetupView: View {
     }
 
     private func title(_ id: ServiceID) -> String {
-        switch id { case .foxcode: return "FoxCode 中转站"; case .codex: return "Codex"; case .grok: return "Grok Bot" }
+        switch id {
+        case .foxcode: return "中转站"
+        case .codex: return "Codex"
+        case .grok: return "Grok Bot"
+        default: return store.card(for: id)?.title ?? "自定义站点"
+        }
     }
     private func explanation(_ id: ServiceID) -> String {
         switch id {
-        case .foxcode: return "连接 foxcode.rjj.cc，分别显示按量和月卡额度。"
+        case .foxcode: return "连接当前内置适配的服务，分别显示按量和月卡额度。"
         case .codex: return "需要本机 Codex 程序和 ChatGPT 登录。"
         case .grok: return "通过 Chrome 中的 Cursor 登录查询服务器额度，需要本地扩展。"
+        default: return "通过已验证的配置读取站点额度。"
         }
     }
     private func stateLabel(_ card: ServiceCard) -> String {

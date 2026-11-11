@@ -26,6 +26,18 @@ public struct ServiceRefreshCoordinator: Sendable {
     public func isEnabled(_ id: ServiceID) -> Bool { slots[id]?.enabled == true }
     public func isRunning(_ id: ServiceID) -> Bool { slots[id]?.active != nil }
 
+    @discardableResult
+    public mutating func enableWithFreshReading(for id: ServiceID, at now: TimeInterval) -> Bool {
+        var slot = slots[id] ?? Slot()
+        guard now.isFinite, slot.active == nil else { return false }
+        slot.enabled = true; slot.generation &+= 1
+        slot.scheduler = RefreshScheduler()
+        slot.scheduler.updateNetwork(network, at: now)
+        guard slot.scheduler.seedFreshReading(at: now) else { return false }
+        slots[id] = slot
+        return true
+    }
+
     public mutating func setEnabled(_ enabled: Bool, for id: ServiceID, at now: TimeInterval) {
         var slot = slots[id] ?? Slot()
         guard slot.enabled != enabled else { return }
@@ -47,7 +59,7 @@ public struct ServiceRefreshCoordinator: Sendable {
     }
 
     public mutating func trigger(_ event: RefreshTrigger, for id: ServiceID? = nil, at now: TimeInterval) {
-        for service in id.map({ [$0] }) ?? ServiceID.allCases {
+        for service in id.map({ [$0] }) ?? Array(slots.keys) {
             guard var slot = slots[service], slot.enabled else { continue }
             if case .manual = event, let active = slot.active, active.generation != slot.generation {
                 // A cancelled old request cannot satisfy a new explicit refresh.
@@ -71,7 +83,8 @@ public struct ServiceRefreshCoordinator: Sendable {
 
     public mutating func beginDue(at now: TimeInterval) -> [ServiceRefreshTicket] {
         var tickets: [ServiceRefreshTicket] = []
-        for id in ServiceID.allCases {
+        let ordered = ServiceID.allCases + slots.keys.filter { $0.customUUID != nil }.sorted { $0.rawValue < $1.rawValue }
+        for id in ordered {
             guard var slot = slots[id], slot.enabled, slot.active == nil,
                   slot.scheduler.beginIfDue(at: now) else { continue }
             let ticket = ServiceRefreshTicket(service: id, generation: slot.generation)

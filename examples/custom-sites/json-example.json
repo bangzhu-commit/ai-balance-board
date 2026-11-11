@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "示例额度（请修改）",
+  "origin": "https://relay.example.com",
+  "loginPath": "/login",
+  "pagePath": "/dashboard",
+  "mode": "json",
+  "requestPath": "/api/usage",
+  "success": { "path": "/success", "equals": true },
+  "metrics": [
+    { "id": "balance", "label": "账户余额", "unit": "USD", "meaning": "balance", "value": "/data/balance" },
+    { "id": "monthly", "label": "本月剩余", "unit": "次", "meaning": "remaining", "value": "/data/used", "total": "/data/limit", "operation": "remaining" }
+  ]
+}

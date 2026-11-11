@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-从 [v0.4.0 Release](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.4.0) 下载 `AI-Balance-Board-0.4.0-macos-arm64.zip`。GitHub 自动生成的 “Source code” 是开发源码，不是可双击的应用。
+从 [v0.5.0 Release](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.5.0) 下载 `AI-Balance-Board-0.5.0-macos-arm64.zip`。GitHub 自动生成的 “Source code” 是开发源码，不是可双击的应用。
 
 解压后将 `AI 额度看板.app` 拖入“应用程序”再打开。首次遇到系统拦截，先按下面的提示类型判断，再决定是否继续。
 
@@ -36,12 +36,16 @@
 
 ## 校验下载文件
 
-1. 在同一个 Release 页面下载 `SHA256SUMS.txt`，用“文本编辑”打开，找到文件名为 `AI-Balance-Board-0.4.0-macos-arm64.zip` 的一行。
+1. 在同一个 Release 页面下载 `SHA256SUMS.txt`，用“文本编辑”打开，找到文件名为 `AI-Balance-Board-0.5.0-macos-arm64.zip` 的一行。
 2. 打开“应用程序 → 实用工具 → 终端”。输入 `shasum -a 256`，再输入一个空格，先不要回车。
 3. 将下载的 **ZIP 文件**从 Finder 拖入终端窗口，系统会自动填入文件路径，再按回车。此命令只读取文件并计算校验值，不会安装或运行应用。
 4. 比较终端输出开头的 64 位摘要与校验文件中对应行的摘要，应该完全一致。
 
 摘要不一致时不要安装，应重新下载或报告问题。SHA256 用于核验下载内容一致性，不替代开发者签名或公证。
+
+## 添加自己的站点
+
+打开“服务与设置 → 自定义站点 → 添加站点”，按[自定义站点接入说明](custom-sites.md)完成导入、登录、测试与核对。配置只保存在本机；不要把真实配置文件、账号或网页响应附在公开 Issue 中。
 
 ## 注册与移动 app
 

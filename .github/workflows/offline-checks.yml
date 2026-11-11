@@ -24,6 +24,8 @@ jobs:
         run: |
           ./scripts/test.sh
           node --test browser-extension/tests/extension.test.mjs
+          zsh scripts/test-custom-site-provider.sh
+          zsh scripts/test-custom-site-webkit.sh
           python3 scripts/test-browser-bridge.py
           python3 scripts/test-browser-client.py
           bash scripts/check-login-item.sh

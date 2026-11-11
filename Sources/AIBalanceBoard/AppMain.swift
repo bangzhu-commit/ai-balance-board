@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AnyView(DashboardView(cards: store.visibleCards, isRefreshing: store.isRefreshing,
                              onRefresh: { [weak self] in self?.store.refresh() },
                              onConnect: { [weak self] id in
-                                 if id == .foxcode { self?.store.connect(id) } else { self?.setup.show() }
+                                 if id == .foxcode || id.customUUID != nil { self?.store.connect(id) } else { self?.setup.show() }
                              },
                              onHide: { [weak self] in self?.panel.hide() },
                              onSettings: { [weak self] in self?.setup.show() }))
