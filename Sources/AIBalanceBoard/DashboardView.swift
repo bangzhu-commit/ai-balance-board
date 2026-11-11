@@ -27,7 +27,7 @@ struct DashboardView: View {
                     Spacer(minLength: 4)
                 }
                 .frame(maxWidth: .infinity, minHeight: 34)
-                .overlay(WindowDragArea())
+                .help("拖动标题栏移动看板")
                 Button(action: onSettings) {
                     Image(systemName: "gearshape").frame(width: 25, height: 25)
                 }
@@ -75,38 +75,28 @@ struct DashboardView: View {
                 }
                 .padding(.horizontal, 12)
             }
-            .frame(height: cardAreaHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack(spacing: 5) {
                 Image(systemName: "clock").font(.system(size: 9))
-                Text(cards.isEmpty ? "启用服务后开始监控 · 拖动标题栏移动" : "每 5 分钟刷新 · 拖动标题栏移动")
+                Text(cards.isEmpty ? "拖标题移动 · 右下角缩放" : "每 5 分钟刷新 · 拖标题移动 · 右下角缩放")
                     .font(.system(size: 9))
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 18)
+            .padding(.leading, 18)
+            .padding(.trailing, 28)
             .padding(.vertical, 12)
         }
         .foregroundStyle(ink)
-        .frame(width: 340)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(minWidth: 300, maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
         .background(Color(red: 0.94, green: 0.95, blue: 0.94).opacity(0.98))
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.85), lineWidth: 1))
         .environment(\.colorScheme, .light)
     }
 
-    private var cardAreaHeight: CGFloat {
-        if cards.isEmpty { return 180 }
-        let natural = cards.reduce(CGFloat(0)) { sum, card in
-            guard let reading = card.reading else { return sum + 130 }
-            let rows = reading.metrics.enumerated().reduce(CGFloat(0)) { height, item in
-                height + (item.offset == 0 ? 35 : 25) + (item.element.remainingFraction == nil ? 0 : 11) + (item.element.resetsAt == nil ? 0 : 17)
-            }
-            return sum + 106 + rows
-        } + CGFloat(max(0, cards.count - 1)) * 9
-        return min(natural, max(220, (NSScreen.main?.visibleFrame.height ?? 800) - 150), 620)
-    }
+
 }
 
 private struct QuotaCardView: View {

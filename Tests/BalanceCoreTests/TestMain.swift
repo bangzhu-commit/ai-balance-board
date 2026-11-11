@@ -56,6 +56,8 @@ enum TestMain {
         TestResults.run("分服务：清除后显式刷新等待旧查询且不丢请求") { serviceScheduler.testExplicitRefreshAfterClearWaitsForOldTaskWithoutLosingRequest() }
         TestResults.run("分服务：浏览器重连只查询Grok并合并唤醒") { serviceScheduler.testBrowserReconnectOnlyRefreshesGrokAndWakeMerges() }
         TestResults.run("分服务：单卡手动刷新不影响其他服务") { serviceScheduler.testManualRefreshTargetsOnlyRequestedService() }
+        TestResults.run("分服务：限流冷却覆盖恢复与连续手动刷新") { serviceScheduler.testRateLimitDefersPendingRecoveryAndRepeatedManualRefresh() }
+        TestResults.run("分服务：限流重启用保留冷却且不影响认证恢复") { serviceScheduler.testRateLimitSurvivesReenableAndAuthenticationRecoveryStillWorks() }
         let preferences = BoardPreferencesTests()
         TestResults.run("设置：全新安装默认不启用服务") { preferences.testCleanInstallStartsWithNoServicesAndIncompleteSetup() }
         TestResults.run("设置：旧版迁移且尊重明确的空选择") { preferences.testLegacyMigrationAndExplicitEmptySelectionAreStable() }
@@ -71,6 +73,10 @@ enum TestMain {
         TestResults.run("自定义：旧服务标识编码兼容") { try custom.testServiceIdentifierCompatibility() }
         TestResults.run("自定义：本机持久化与失败处理") { try custom.testRepositoryPersistenceAndErrors() }
         TestResults.run("自定义：动态调度补查及首次测试去重") { try custom.testDynamicSchedulesAndFreshTestAdoption() }
+
+        let catalog = AIToolCatalogTests()
+        TestResults.run("工具目录：展示入口不自动创建服务") { catalog.testCatalogKeepsUserChoicesSeparateFromServiceIdentifiers() }
+        TestResults.run("工具目录：内置账号来源与产品名称明确") { catalog.testNativeMappingDoesNotConflateProductNamesAndQuotaSources() }
 
         TestResults.printSummary()
         exit(TestResults.failures.isEmpty ? EXIT_SUCCESS : EXIT_FAILURE)

@@ -153,6 +153,39 @@ enum BrowserBridgeFailure: Error { case unavailable, loginRequired, busy, networ
         do { try store.confirmCustomSite(id: second); preconditionFailure("new login must invalidate old account test") }
         catch { checks += 1 }
         try store.removeCustomSite(id: second)
+
+        // Both native provider and browser bridge rate-limit errors must enter
+        // the coordinator's cooldown. Repeated tests must not bypass it.
+        for limited: Error in [BalanceError.rateLimited("fixture limit"), BrowserBridgeFailure.limited] {
+            let limitedID = try store.addCustomSite(config: config)
+            let service = ServiceID.custom(limitedID)
+            store.testCustomSite(id: limitedID)
+            clock += 3; store.refresh(service)
+            await settle { CustomSiteProvider.pending.count == 1 }
+            let callsBeforeFailure = CustomSiteProvider.calls
+            CustomSiteProvider.finish(error: limited)
+            await settle { !store.customTesting.contains(limitedID) }
+            check(store.card(for: service)?.connectionState == .rateLimited)
+            check(store.card(for: service)?.status.contains("至少 5 分钟") == true)
+            store.testCustomSite(id: limitedID)
+            store.refresh(service)
+            check(!store.customTesting.contains(limitedID))
+            check(store.customTestErrors[limitedID]?.contains("限流冷却") == true)
+            check(CustomSiteProvider.calls == callsBeforeFailure)
+            clock += 299
+            store.testCustomSite(id: limitedID)
+            check(!store.customTesting.contains(limitedID))
+            clock += 1
+            store.testCustomSite(id: limitedID)
+            check(store.customTesting.contains(limitedID))
+            clock += 3; store.refresh(service)
+            await settle { CustomSiteProvider.pending.count == 1 }
+            check(CustomSiteProvider.calls == callsBeforeFailure + 1)
+            CustomSiteProvider.finish(61)
+            await settle { !store.customTesting.contains(limitedID) }
+            check(store.customTestReadings[limitedID] != nil)
+            try store.removeCustomSite(id: limitedID)
+        }
         store.stop()
         let repository = CustomSiteRepository(url: directory.appendingPathComponent("custom-sites.json"))
         let finalRecords = try repository.load(); check(finalRecords.isEmpty)

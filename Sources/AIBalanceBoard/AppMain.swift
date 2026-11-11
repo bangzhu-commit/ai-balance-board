@@ -35,7 +35,7 @@ enum AppMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var store: BalanceStore!
     private var panel: PanelController!
     private var item: NSStatusItem!
@@ -51,11 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "gauge.with.dots.needle.33percent", accessibilityDescription: "AI 额度看板")
         let menu = NSMenu()
-        for (title, action, key) in [("显示看板", #selector(showPanel), ""), ("隐藏看板", #selector(hidePanel), ""), ("服务与设置…", #selector(showSettings), ","), ("刷新额度", #selector(refresh), "r")] {
+        for (title, action, key) in [("显示看板", #selector(showPanel), ""), ("置顶显示", #selector(toggleAlwaysOnTop), ""), ("隐藏看板", #selector(hidePanel), ""), ("恢复看板位置与大小", #selector(resetPanelPosition), ""), ("服务与设置…", #selector(showSettings), ","), ("刷新额度", #selector(refresh), "r")] {
             let entry = NSMenuItem(title: title, action: action, keyEquivalent: key); entry.target = self; menu.addItem(entry)
         }
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "退出 AI 额度看板", action: #selector(quitApp), keyEquivalent: "q"); quit.target = self; menu.addItem(quit)
+        menu.delegate = self
         item.menu = menu
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem(); mainMenu.addItem(appMenuItem)
@@ -83,6 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func showPanel() { panel.show() }
     @objc private func hidePanel() { panel.hide() }
+    @objc private func toggleAlwaysOnTop() { panel.setAlwaysOnTop(!panel.alwaysOnTop) }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.items.first(where: { $0.action == #selector(toggleAlwaysOnTop) })?.state = panel.alwaysOnTop ? .on : .off
+    }
+    @objc private func resetPanelPosition() { panel.resetPosition() }
     @objc private func refresh() { store.refresh() }
     @objc private func showSettings() { setup.show() }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

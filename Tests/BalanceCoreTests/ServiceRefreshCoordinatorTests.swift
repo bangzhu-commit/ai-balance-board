@@ -135,6 +135,61 @@ final class ServiceRefreshCoordinatorTests {
         scheduler.finish(tickets[0], at: 12, retrySoon: false)
         expectEqual(scheduler.nextDueAt, 303)
     }
+
+    func testRateLimitDefersPendingRecoveryAndRepeatedManualRefresh() {
+        var scheduler = ready([.codex, .grok])
+        let tickets = scheduler.beginDue(at: 2)
+        let codex = tickets.first { $0.service == .codex }!
+        let grok = tickets.first { $0.service == .grok }!
+        scheduler.trigger(.wake, at: 3)
+        scheduler.updateNetwork(.offline, at: 3.1)
+        scheduler.updateNetwork(.online, at: 3.2)
+        scheduler.finish(codex, at: 4, retrySoon: false, rateLimited: true)
+        scheduler.finish(grok, at: 4, retrySoon: false)
+        expectTrue(scheduler.isRateLimited(.codex, at: 6))
+        // The unaffected service still gets its recovery query immediately.
+        let recovery = scheduler.beginDue(at: 6)
+        expectEqual(recovery.map(\.service), [.grok])
+        scheduler.finish(recovery[0], at: 7, retrySoon: false)
+        for instant: TimeInterval in [8, 20, 100, 303.99] {
+            scheduler.trigger(.manual, for: .codex, at: instant)
+            expectTrue(scheduler.beginDue(at: instant).isEmpty)
+            expectEqual(scheduler.nextDueAt, 304)
+        }
+        let retry = scheduler.beginDue(at: 304)
+        expectEqual(retry.map(\.service), [.codex])
+        expectFalse(scheduler.isRateLimited(.codex, at: 304))
+        expectTrue(scheduler.beginDue(at: 304).isEmpty)
+        scheduler.finish(retry[0], at: 305, retrySoon: false, rateLimited: true)
+        expectEqual(scheduler.nextDueAt, 307) // Grok's independent periodic query.
+        scheduler.trigger(.manual, for: .codex, at: 306)
+        expectTrue(scheduler.beginDue(at: 306).isEmpty)
+    }
+
+    func testRateLimitSurvivesReenableAndAuthenticationRecoveryStillWorks() {
+        var scheduler = ready([.codex])
+        let ticket = scheduler.beginDue(at: 2)[0]
+        scheduler.finish(ticket, at: 3, retrySoon: false, rateLimited: true)
+        scheduler.setEnabled(false, for: .codex, at: 4)
+        expectNil(scheduler.nextDueAt)
+        scheduler.setEnabled(true, for: .codex, at: 5)
+        scheduler.invalidate(.codex)
+        scheduler.trigger(.manual, for: .codex, at: 6)
+        expectEqual(scheduler.nextDueAt, 303)
+        expectTrue(scheduler.beginDue(at: 100).isEmpty)
+        let retry = scheduler.beginDue(at: 303)
+        expectEqual(retry.count, 1)
+        scheduler.finish(retry[0], at: 304, retrySoon: false)
+        scheduler.trigger(.connectionAvailable, for: .codex, at: 305)
+        expectEqual(scheduler.beginDue(at: 307).map(\.service), [.codex])
+
+        var login = ready([.grok])
+        let unauthenticated = login.beginDue(at: 2)[0]
+        login.trigger(.connectionAvailable, for: .grok, at: 3)
+        login.finish(unauthenticated, at: 4, retrySoon: false)
+        expectEqual(login.nextDueAt, 6)
+        expectEqual(login.beginDue(at: 6).map(\.service), [.grok])
+    }
 }
 
 final class BoardPreferencesTests {

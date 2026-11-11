@@ -24,25 +24,30 @@ struct SetupView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(store.setupCompleted ? "服务与设置" : "开始使用 AI 额度看板")
                     .font(.title2.bold())
-                Text("选择你使用的服务，连接后查看第一笔真实额度。监控不调用 AI 模型。")
+                Text("选择 AI 工具或添加网站，连接后查看真实额度。日常查询不调用模型。")
                     .foregroundStyle(.secondary)
             }
             Picker("设置步骤", selection: $navigation.step) {
-                Text("1 选择服务").tag(0)
+                Text("1 选择工具").tag(0)
                 Text("2 检查与连接").tag(1)
                 Text("3 运行方式").tag(2)
             }.pickerStyle(.segmented).labelsHidden()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if navigation.step == 0 { serviceSelection }
-                    else if navigation.step == 1 { connections }
-                    else { preferences }
-                    if !support.message.isEmpty {
-                        Text(support.message).font(.callout).foregroundStyle(.secondary)
-                            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if navigation.step == 0 { serviceSelection }
+                        else if navigation.step == 1 { connections }
+                        else { preferences }
+                        if !support.message.isEmpty {
+                            Text(support.message).font(.callout).foregroundStyle(.secondary)
+                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+                }
+                .onChange(of: store.customSites.count) { previous, current in
+                    if current > previous { proxy.scrollTo("custom-connections", anchor: .top) }
+                }
             }
             Divider()
             HStack {
@@ -76,31 +81,13 @@ struct SetupView: View {
     }
 
     private var serviceSelection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("只查询已开启的服务；以后可以随时增减。").foregroundStyle(.secondary)
-            ForEach(ServiceID.allCases, id: \.self) { id in
-                GroupBox {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(title(id)).font(.headline)
-                            Text(explanation(id)).font(.callout).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        Toggle(title(id), isOn: Binding(get: { store.enabledServices.contains(id) }, set: { store.setEnabled($0, for: id) }))
-                            .labelsHidden().toggleStyle(.switch).accessibilityLabel(title(id))
-                    }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            Text("以上为内置连接。其他网站可在下方导入经过适配的读取配置；需要逐站测试，不能保证任意平台都可自动查询。")
-                .font(.footnote).foregroundStyle(.secondary)
-            CustomSitesView(store: store)
-        }
+        CustomSitesView(store: store, showsCatalog: true)
     }
 
     private var connections: some View {
         VStack(alignment: .leading, spacing: 16) {
             if store.enabledServices.isEmpty && store.customSites.isEmpty {
-                Text("还没有选择服务。回到第 1 步开启一项，或选择“稍后设置”。")
+                Text("还没有选择工具。回到第 1 步选择内置连接或添加自定义连接，也可选择“稍后设置”。")
             }
             ForEach(store.visibleCards.filter { ServiceID.allCases.contains($0.id) }) { card in
                 GroupBox {
@@ -196,7 +183,9 @@ struct SetupView: View {
                     Toggle("登录 Mac 后自动启动", isOn: Binding(get: { support.loginEnabled }, set: { support.setLogin($0) }))
                         .disabled(support.busy)
                     Text("每约 5 分钟查一次。唤醒、联网恢复后合并补查，不追赶关机期间的历史次数。")
-                    Text("按住顶部图标或标题拖动；× 只收起小窗。完全停止监控请从菜单栏退出。")
+                    Toggle("保持看板置顶", isOn: Binding(get: { support.alwaysOnTop }, set: { support.setAlwaysOnTop($0) }))
+                    Text("关闭置顶后可被其他应用覆盖；从菜单栏可找回看板。")
+                    Text("按住顶部图标、标题或空白处拖动；拖动窗口边缘或右下角调整大小。× 只收起小窗，完全停止监控请从菜单栏退出。")
                     Text("Grok Bot 需要 Chrome 运行且已登录。不同服务的额度单位与周期分别显示，不相加。")
                 }.font(.callout).padding(8)
             }
@@ -216,6 +205,14 @@ struct SetupView: View {
             }
             Text("诊断不包含账号、余额、Cookie、token 或本机路径。不会自动上传。")
                 .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            HStack {
+                Text("版本 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版") · 构建 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Link("下载与更新", destination: URL(string: "https://github.com/bangzhu-commit/ai-balance-board/releases")!)
+                Link("安装与帮助", destination: URL(string: "https://github.com/bangzhu-commit/ai-balance-board/blob/main/docs/installation.md")!)
+            }.font(.callout)
         }
     }
 
@@ -228,22 +225,6 @@ struct SetupView: View {
         }.font(.callout)
     }
 
-    private func title(_ id: ServiceID) -> String {
-        switch id {
-        case .foxcode: return "中转站"
-        case .codex: return "Codex"
-        case .grok: return "Grok Bot"
-        default: return store.card(for: id)?.title ?? "自定义站点"
-        }
-    }
-    private func explanation(_ id: ServiceID) -> String {
-        switch id {
-        case .foxcode: return "连接当前内置适配的服务，分别显示按量和月卡额度。"
-        case .codex: return "需要本机 Codex 程序和 ChatGPT 登录。"
-        case .grok: return "通过 Chrome 中的 Cursor 登录查询服务器额度，需要本地扩展。"
-        default: return "通过已验证的配置读取站点额度。"
-        }
-    }
     private func stateLabel(_ card: ServiceCard) -> String {
         if card.isRefreshing { return "正在查询" }
         switch card.connectionState {

@@ -255,6 +255,7 @@ final class BalanceStore: ObservableObject {
         refreshTasks[id] = Task { [weak self] in
             guard let self else { return }
             var retrySoon = false
+            var rateLimited = false
             do {
                 let reading: BalanceReading
                 switch id {
@@ -277,14 +278,16 @@ final class BalanceStore: ObservableObject {
                 }
             } catch {
                 if self.hasStarted, !Task.isCancelled, self.coordinator.accepts(ticket) {
-                    retrySoon = self.acceptFailure(error, for: id)
+                    let failure = self.acceptFailure(error, for: id)
+                    retrySoon = failure.retrySoon
+                    rateLimited = failure.rateLimited
                     if let uuid = id.customUUID, self.customTesting.contains(uuid) {
                         self.customTestErrors[uuid] = error.localizedDescription
                     }
                 }
             }
             let finishedTest = id.customUUID.flatMap { self.coordinator.accepts(ticket) && self.customTesting.contains($0) ? $0 : nil }
-            self.coordinator.finish(ticket, at: self.now, retrySoon: retrySoon)
+            self.coordinator.finish(ticket, at: self.now, retrySoon: retrySoon, rateLimited: rateLimited)
             if let uuid = finishedTest {
                 self.customTesting.remove(uuid)
                 self.coordinator.setEnabled(false, for: id, at: self.now)
@@ -297,7 +300,7 @@ final class BalanceStore: ObservableObject {
         }
     }
 
-    private func acceptFailure(_ error: Error, for id: ServiceID) -> Bool {
+    private func acceptFailure(_ error: Error, for id: ServiceID) -> (retrySoon: Bool, rateLimited: Bool) {
         let state: ServiceConnectionState
         let retrySoon: Bool
         if let failure = error as? BalanceError {
@@ -319,11 +322,12 @@ final class BalanceStore: ObservableObject {
         }
         if let i = cards.firstIndex(where: { $0.id == id }) {
             cards[i].status = (cards[i].reading == nil ? "" : "刷新失败，显示上次数据。") + error.localizedDescription
+            if state == .rateLimited { cards[i].status += " 至少 5 分钟后再查，手动刷新也会等待。" }
             cards[i].hasError = true
             cards[i].connectionState = state
             cards[i].needsConnection = state.needsConnection
         }
-        return retrySoon
+        return (retrySoon, state == .rateLimited)
     }
 
     private func updateRefreshingState() {
@@ -375,7 +379,7 @@ final class BalanceStore: ObservableObject {
     }
 
     private func customCard(_ record: CustomSiteRecord) -> ServiceCard {
-        ServiceCard(id: record.serviceID, title: record.config.name, subtitle: "自定义站点", status: "登录并测试后启用")
+        ServiceCard(id: record.serviceID, title: record.config.name, subtitle: "自定义连接", status: "登录并测试后启用")
     }
 
     private func fingerprint(_ record: CustomSiteRecord) -> String {
@@ -473,6 +477,10 @@ final class BalanceStore: ObservableObject {
         guard customSites.contains(where: { $0.id == uuid }), !customTesting.contains(uuid) else { return }
         guard hasStarted else { customSiteMessage = "看板尚未开始运行，请重新打开后测试。"; return }
         let id = ServiceID.custom(uuid)
+        guard !coordinator.isRateLimited(id, at: now) else {
+            customTestErrors[uuid] = "站点仍在限流冷却中，请在上次限流至少 5 分钟后重新测试。"
+            return
+        }
         // A test shares the same physical scheduler slot as monitoring, including
         // cancellation/generation guards. Never issue a second parallel request.
         if let record = customSites.first(where: { $0.id == uuid }) { setCustomConfirmation(record, confirmed: false) }

@@ -9,6 +9,7 @@ final class SetupSupportModel: ObservableObject {
     @Published var bridgeConnected = false
     @Published var codexPath: String?
     @Published var loginEnabled = false
+    @Published var alwaysOnTop = UserDefaults.standard.bool(forKey: "AIBalanceBoard.alwaysOnTop")
     @Published var busy = false
     @Published var message = ""
     private var checking = false
@@ -16,6 +17,7 @@ final class SetupSupportModel: ObservableObject {
     func inspect() async {
         guard !checking else { return }
         checking = true
+        alwaysOnTop = UserDefaults.standard.bool(forKey: "AIBalanceBoard.alwaysOnTop")
         defer { checking = false }
         chromeInstalled = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") != nil
         bridgeConnected = BrowserBridgeClient().connectedGeneration() != nil
@@ -38,6 +40,12 @@ final class SetupSupportModel: ObservableObject {
         perform(success: "本机组件已安装。下一步在 Chrome 加载连接器文件夹。") {
             try SetupIntegration.registerBridge(app: app)
         }
+    }
+
+    func setAlwaysOnTop(_ enabled: Bool) {
+        alwaysOnTop = enabled
+        UserDefaults.standard.set(enabled, forKey: "AIBalanceBoard.alwaysOnTop")
+        NotificationCenter.default.post(name: Notification.Name("AIBalanceBoard.panelPreferencesChanged"), object: nil)
     }
 
     func setLogin(_ enabled: Bool) {

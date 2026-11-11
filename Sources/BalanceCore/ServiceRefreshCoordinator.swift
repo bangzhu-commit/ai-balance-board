@@ -13,6 +13,9 @@ public struct ServiceRefreshCoordinator: Sendable {
         var generation: UInt64 = 0
         var scheduler = RefreshScheduler()
         var active: ServiceRefreshTicket?
+        // Keep this outside the scheduler: disable/re-enable and a new test may
+        // reset its cadence, but must not bypass a server's rate-limit cooldown.
+        var rateLimitUntil: TimeInterval?
     }
     private var slots: [ServiceID: Slot] = [:]
     private var network: RefreshNetworkState = .unknown
@@ -20,11 +23,18 @@ public struct ServiceRefreshCoordinator: Sendable {
     public init() {}
 
     public var nextDueAt: TimeInterval? {
-        slots.values.compactMap { $0.enabled && $0.active == nil ? $0.scheduler.nextDueAt : nil }.min()
+        slots.values.compactMap { slot -> TimeInterval? in
+            guard slot.enabled, slot.active == nil, let due = slot.scheduler.nextDueAt else { return nil }
+            return max(due, slot.rateLimitUntil ?? due)
+        }.min()
     }
 
     public func isEnabled(_ id: ServiceID) -> Bool { slots[id]?.enabled == true }
     public func isRunning(_ id: ServiceID) -> Bool { slots[id]?.active != nil }
+    public func isRateLimited(_ id: ServiceID, at now: TimeInterval) -> Bool {
+        guard let until = slots[id]?.rateLimitUntil else { return false }
+        return now < until
+    }
 
     @discardableResult
     public mutating func enableWithFreshReading(for id: ServiceID, at now: TimeInterval) -> Bool {
@@ -86,6 +96,7 @@ public struct ServiceRefreshCoordinator: Sendable {
         let ordered = ServiceID.allCases + slots.keys.filter { $0.customUUID != nil }.sorted { $0.rawValue < $1.rawValue }
         for id in ordered {
             guard var slot = slots[id], slot.enabled, slot.active == nil,
+                  !isRateLimited(id, at: now),
                   slot.scheduler.beginIfDue(at: now) else { continue }
             let ticket = ServiceRefreshTicket(service: id, generation: slot.generation)
             slot.active = ticket
@@ -102,9 +113,15 @@ public struct ServiceRefreshCoordinator: Sendable {
 
     /// Authentication, missing dependencies, invalid responses, and rate limits use
     /// normal cadence. Only retryable transport failures opt into short backoff.
-    public mutating func finish(_ ticket: ServiceRefreshTicket, at now: TimeInterval, retrySoon: Bool) {
+    public mutating func finish(_ ticket: ServiceRefreshTicket, at now: TimeInterval, retrySoon: Bool,
+                                rateLimited: Bool = false) {
         guard var slot = slots[ticket.service], slot.active == ticket else { return }
         slot.active = nil
+        if rateLimited, now.isFinite {
+            // Preserve one pending wake/recovery/manual request, while enforcing
+            // at least the ordinary five-minute interval before it can run.
+            slot.rateLimitUntil = max(slot.rateLimitUntil ?? now, now + 300)
+        }
         if slot.enabled && slot.scheduler.isRunning {
             slot.scheduler.finish(at: now, succeeded: slot.generation != ticket.generation || !retrySoon)
         }
