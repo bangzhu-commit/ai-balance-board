@@ -1,6 +1,38 @@
 import AppKit
 import SwiftUI
 
+/// A logical canvas stays fixed during dragging so every glyph and hit target shares one zoom.
+enum PanelZoom {
+    static let canvas = NSSize(width: 340, height: 520)
+    static let minimum: CGFloat = 0.8
+    static let maximum: CGFloat = 1.6
+
+    static func size(at scale: CGFloat, canvas: NSSize = PanelZoom.canvas) -> NSSize {
+        NSSize(width: canvas.width * scale, height: canvas.height * scale)
+    }
+
+    static func fittingScale(_ size: NSSize, canvas: NSSize = PanelZoom.canvas) -> CGFloat {
+        min(size.width / canvas.width, size.height / canvas.height)
+    }
+
+    static func bounded(_ scale: CGFloat, upperLimit: CGFloat = maximum) -> CGFloat {
+        let upper = max(0.01, min(maximum, upperLimit))
+        return min(max(scale.isFinite ? scale : 1, min(minimum, upper)), upper)
+    }
+
+    /// Choose the dimension the user moved most, then resize both dimensions.
+    static func proposedSize(_ proposed: NSSize, from current: NSSize,
+                             minimum minSize: NSSize, maximum maxSize: NSSize, canvas: NSSize = PanelZoom.canvas) -> NSSize {
+        let widthChange = (proposed.width - current.width) / canvas.width
+        let heightChange = (proposed.height - current.height) / canvas.height
+        let proposedScale = abs(widthChange) >= abs(heightChange)
+            ? proposed.width / canvas.width : proposed.height / canvas.height
+        let lower = max(minSize.width / canvas.width, minSize.height / canvas.height)
+        let upper = min(maxSize.width / canvas.width, maxSize.height / canvas.height)
+        return size(at: min(max(proposedScale, lower), upper), canvas: canvas)
+    }
+}
+
 /// Geometry is independent of live screens so restored and disconnected-display positions are testable.
 enum PanelPlacement {
     static func screen(for frame: NSRect, visibleFrames: [NSRect]) -> NSRect? {
@@ -14,13 +46,14 @@ enum PanelPlacement {
         return overlap.isNull ? 0 : overlap.width * overlap.height
     }
 
-    static func clamped(_ frame: NSRect, inside screen: NSRect) -> NSRect {
+    static func clamped(_ frame: NSRect, inside screen: NSRect, canvas: NSSize = PanelZoom.canvas) -> NSRect {
         let visible = screen.insetBy(dx: 8, dy: 8)
-        let width = min(frame.width, visible.width)
-        let height = min(frame.height, visible.height)
-        let x = frame.minX.isFinite ? min(max(frame.minX, visible.minX), visible.maxX - width) : visible.minX
-        let y = frame.minY.isFinite ? min(max(frame.minY, visible.minY), visible.maxY - height) : visible.maxY - height
-        return NSRect(x: x, y: y, width: width, height: height)
+        let scale = PanelZoom.bounded(PanelZoom.fittingScale(frame.size, canvas: canvas),
+                                     upperLimit: PanelZoom.fittingScale(visible.size, canvas: canvas))
+        let size = PanelZoom.size(at: scale, canvas: canvas)
+        let x = frame.minX.isFinite ? min(max(frame.minX, visible.minX), visible.maxX - size.width) : visible.minX
+        let y = frame.minY.isFinite ? min(max(frame.minY, visible.minY), visible.maxY - size.height) : visible.maxY - size.height
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 }
 
@@ -28,30 +61,34 @@ enum PanelPlacement {
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
     private let panel: FloatingBalancePanel
-    private let hostingView: PassiveHostingView<AnyView>
     private let container: PanelContentView
     private let defaults: UserDefaults
     private let positionKey = "AIBalanceBoard.panelPosition"
     private let sizeKey = "AIBalanceBoard.panelSize"
+    private let scaleKey = "AIBalanceBoard.panelScale"
+    private var canvasSize: NSSize
+    private var preferredScale: CGFloat = 1
     private var adjustingFrame = false
     var alwaysOnTop: Bool { defaults.bool(forKey: "AIBalanceBoard.alwaysOnTop") }
     private var hasBeenShown = false
     private var isDragging = false
     private var pendingContent: AnyView?
+    private var pendingCanvasSize: NSSize?
 
-    init(content: AnyView, defaults: UserDefaults = .standard) {
+    init(content: AnyView, canvasSize: NSSize = PanelZoom.canvas, defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        hostingView = PassiveHostingView(rootView: content)
-        container = PanelContentView(hostingView: hostingView)
+        self.canvasSize = canvasSize
+        container = PanelContentView(content: content, canvasSize: canvasSize)
         panel = FloatingBalancePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 520),
+            contentRect: NSRect(origin: .zero, size: canvasSize),
             styleMask: [.borderless, .nonactivatingPanel, .resizable], backing: .buffered, defer: false
         )
         super.init()
         panel.title = "AI 额度看板"
         panel.level = alwaysOnTop ? .floating : .normal
-        panel.minSize = NSSize(width: 300, height: 240)
-        panel.maxSize = NSSize(width: 800, height: 1400)
+        panel.contentAspectRatio = canvasSize
+        panel.minSize = PanelZoom.size(at: PanelZoom.minimum, canvas: canvasSize)
+        panel.maxSize = PanelZoom.size(at: PanelZoom.maximum, canvas: canvasSize)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isFloatingPanel = alwaysOnTop
         panel.hidesOnDeactivate = false
@@ -69,14 +106,19 @@ final class PanelController: NSObject, NSWindowDelegate {
         container.resizeView.onResizeBegan = { [weak self] in self?.isDragging = true }
         container.dragView.onDragEnded = { [weak self] in
             guard let self else { return }
+            // Capture the completed user zoom against the old logical canvas
+            // before pending content changes the canvas or screen fitting.
+            self.preferredScale = PanelZoom.fittingScale(self.panel.frame.size, canvas: self.canvasSize)
             self.isDragging = false
             if let content = self.pendingContent {
                 self.pendingContent = nil
-                self.update(content: content)
+                let canvas = self.pendingCanvasSize
+                self.pendingCanvasSize = nil
+                self.update(content: content, canvasSize: canvas)
             }
             self.keepInsideScreen()
             self.savePosition()
-            self.saveSize()
+            self.saveSize(captureCurrentScale: false)
         }
         container.resizeView.onResizeEnded = container.dragView.onDragEnded
         NotificationCenter.default.addObserver(self, selector: #selector(presentationChanged),
@@ -97,24 +139,39 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func hide() { savePosition(); panel.orderOut(nil) }
 
-    func update(content: AnyView) {
+    func update(content: AnyView, canvasSize newCanvas: NSSize? = nil) {
         // A provider may finish while AppKit is in its mouse tracking loop.
-        // Do not replace content or resize the window beneath an active drag.
-        guard !isDragging else { pendingContent = content; return }
-        hostingView.rootView = content
-        // User-owned size remains stable when readings, errors or cards change.
+        // Do not replace content or change the base canvas beneath an active drag.
+        guard !isDragging else { pendingContent = content; pendingCanvasSize = newCanvas; return }
+        container.update(content: content)
+        if let newCanvas, newCanvas != canvasSize {
+            canvasSize = newCanvas
+            container.canvasSize = newCanvas
+            panel.contentAspectRatio = newCanvas
+            panel.minSize = PanelZoom.size(at: PanelZoom.minimum, canvas: newCanvas)
+            panel.maxSize = PanelZoom.size(at: PanelZoom.maximum, canvas: newCanvas)
+            applyPreferredSizeKeepingTopEdge()
+        }
         keepInsideScreen()
     }
 
     /// User-invoked recovery; no automatic focus change during background refresh.
     func resetPosition() {
         defaults.removeObject(forKey: positionKey)
-        defaults.removeObject(forKey: sizeKey)
-        setFrame(NSRect(origin: panel.frame.origin, size: NSSize(width: 340, height: 520)))
+        resetSize()
         placeAtDefaultPosition()
         savePosition()
-        saveSize()
+        saveSize(captureCurrentScale: false)
         show()
+    }
+
+    /// Restore 100% without moving the window's top-left corner or changing focus.
+    func resetSize() {
+        preferredScale = 1
+        applyPreferredSizeKeepingTopEdge()
+        keepInsideScreen()
+        saveSize(captureCurrentScale: false)
+        savePosition()
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -125,7 +182,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     @objc private func screenParametersChanged() {
         guard !isDragging else { return }
-        // User-owned size remains stable when readings, errors or cards change.
+        applyPreferredSizeKeepingTopEdge()
         keepInsideScreen()
         if hasBeenShown { savePosition() }
     }
@@ -141,6 +198,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.level = alwaysOnTop ? .floating : .normal
     }
 
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        PanelZoom.proposedSize(frameSize, from: sender.frame.size,
+                               minimum: sender.minSize, maximum: sender.maxSize, canvas: canvasSize)
+    }
+
     func windowWillStartLiveResize(_ notification: Notification) { isDragging = true }
     func windowDidEndLiveResize(_ notification: Notification) { container.resizeView.onResizeEnded?() }
     func windowDidResize(_ notification: Notification) {
@@ -148,15 +210,29 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func restoreSize() {
-        guard let raw = defaults.string(forKey: sizeKey) else { return }
-        let size = NSSizeFromString(raw)
-        guard size.width.isFinite, size.height.isFinite else { return }
-        let bounded = NSSize(width: min(max(size.width, panel.minSize.width), panel.maxSize.width),
-                             height: min(max(size.height, panel.minSize.height), panel.maxSize.height))
-        setFrame(NSRect(origin: panel.frame.origin, size: bounded))
+        let scale: CGFloat
+        if defaults.object(forKey: scaleKey) != nil {
+            scale = CGFloat(defaults.double(forKey: scaleKey))
+        } else if let raw = defaults.string(forKey: sizeKey) {
+            // Migrate the old arbitrary rectangle by fitting the complete canvas,
+            // rather than interpreting its width alone and making a tall window.
+            scale = PanelZoom.fittingScale(NSSizeFromString(raw), canvas: canvasSize)
+        } else { scale = 1 }
+        preferredScale = PanelZoom.bounded(scale)
+        setFrame(NSRect(origin: panel.frame.origin, size: PanelZoom.size(at: preferredScale, canvas: canvasSize)))
     }
 
-    private func saveSize() { defaults.set(NSStringFromSize(panel.frame.size), forKey: sizeKey) }
+    private func saveSize(captureCurrentScale: Bool = true) {
+        if captureCurrentScale { preferredScale = PanelZoom.fittingScale(panel.frame.size, canvas: canvasSize) }
+        defaults.set(preferredScale, forKey: scaleKey)
+        // Keep a valid rectangle for older app versions if the user rolls back.
+        defaults.set(NSStringFromSize(panel.frame.size), forKey: sizeKey)
+    }
+
+    private func applyPreferredSizeKeepingTopEdge() {
+        let size = PanelZoom.size(at: preferredScale, canvas: canvasSize)
+        setFrame(NSRect(x: panel.frame.minX, y: panel.frame.maxY - size.height, width: size.width, height: size.height))
+    }
 
     private func setFrame(_ frame: NSRect) {
         guard frame != panel.frame else { return }
@@ -185,7 +261,11 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func keepInsideScreen() {
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
         guard let screen = PanelPlacement.screen(for: panel.frame, visibleFrames: visibleFrames) else { return }
-        let next = PanelPlacement.clamped(panel.frame, inside: screen)
+        let visibleSize = screen.insetBy(dx: 8, dy: 8).size
+        let maximumScale = min(PanelZoom.maximum, PanelZoom.fittingScale(visibleSize, canvas: canvasSize))
+        panel.minSize = PanelZoom.size(at: min(PanelZoom.minimum, maximumScale), canvas: canvasSize)
+        panel.maxSize = PanelZoom.size(at: maximumScale, canvas: canvasSize)
+        let next = PanelPlacement.clamped(panel.frame, inside: screen, canvas: canvasSize)
         setFrame(next)
     }
 
@@ -203,31 +283,74 @@ private final class PassiveHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The native sibling remains mounted when NSHostingView.rootView changes.
-/// Geometry matches the header: settings/refresh/close controls start at x = 228.
+@MainActor
+private final class PanelRenderingState: ObservableObject {
+    @Published var content: AnyView
+    @Published var canvasSize: NSSize
+    @Published var scale: CGFloat = 1
+    init(content: AnyView, canvasSize: NSSize) { self.content = content; self.canvasSize = canvasSize }
+}
+
+private struct ScaledPanelContent: View {
+    @ObservedObject var state: PanelRenderingState
+    var body: some View {
+        state.content
+            .frame(width: state.canvasSize.width, height: state.canvasSize.height)
+            .scaleEffect(state.scale, anchor: .topLeading)
+            .frame(width: state.canvasSize.width * state.scale,
+                   height: state.canvasSize.height * state.scale, alignment: .topLeading)
+            .transaction { $0.animation = nil }
+    }
+}
+
+/// SwiftUI owns both the drawing transform and its matching event transform.
+/// Native drag and resize siblings remain mounted during data and zoom updates.
 final class PanelContentView: NSView {
     let hostingView: NSView
     let dragView = WindowDragView()
     let resizeView = WindowResizeView()
+    private let rendering: PanelRenderingState
+    var canvasSize: NSSize {
+        didSet {
+            resizeView.canvasSize = canvasSize
+            rendering.canvasSize = canvasSize
+            needsLayout = true
+        }
+    }
 
-    init(hostingView: NSView) {
-        self.hostingView = hostingView
-        super.init(frame: .zero)
+    init(content: AnyView, canvasSize: NSSize = PanelZoom.canvas) {
+        self.canvasSize = canvasSize
+        rendering = PanelRenderingState(content: content, canvasSize: canvasSize)
+        hostingView = PassiveHostingView(rootView: ScaledPanelContent(state: rendering))
+        super.init(frame: NSRect(origin: .zero, size: canvasSize))
+        resizeView.canvasSize = canvasSize
         addSubview(hostingView)
         addSubview(dragView)
         addSubview(resizeView)
-        resizeView.toolTip = "拖动右下角调整看板大小"
-        resizeView.setAccessibilityLabel("调整看板大小")
+        resizeView.toolTip = "拖动右下角等比例缩放文字和卡片"
+        resizeView.setAccessibilityLabel("等比例缩放看板")
         dragView.toolTip = "拖动标题栏移动看板；也可从菜单栏恢复窗口位置"
         dragView.setAccessibilityElement(false)
     }
     required init?(coder: NSCoder) { nil }
 
+    func update(content: AnyView) { rendering.content = content }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+        needsDisplay = true
+    }
+
     override func layout() {
         super.layout()
+        let scale = PanelZoom.fittingScale(bounds.size, canvas: canvasSize)
+        if rendering.scale != scale { rendering.scale = scale }
         hostingView.frame = bounds
-        resizeView.frame = NSRect(x: max(0, bounds.width - 25), y: 0, width: 25, height: 25)
-        dragView.frame = NSRect(x: 5, y: max(0, bounds.height - 63), width: max(0, bounds.width - 121), height: min(58, bounds.height))
+        resizeView.frame = NSRect(x: bounds.width - 25 * scale, y: 0, width: 25 * scale, height: 25 * scale)
+        resizeView.setBoundsSize(NSSize(width: 25, height: 25))
+        dragView.frame = NSRect(x: 5 * scale, y: bounds.height - 63 * scale,
+                                width: (canvasSize.width - 121) * scale, height: 58 * scale)
     }
 }
 
@@ -249,6 +372,7 @@ final class WindowDragView: NSView {
 
 /// Visible corner grip supplements the standard resizable window edges.
 final class WindowResizeView: NSView {
+    var canvasSize = PanelZoom.canvas
     var onResizeBegan: (() -> Void)?
     var onResizeEnded: (() -> Void)?
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -265,10 +389,10 @@ final class WindowResizeView: NSView {
         path.stroke()
     }
 
-    static func resizedFrame(initial: NSRect, delta: NSPoint, minimum: NSSize, maximum: NSSize) -> NSRect {
-        let width = min(max(initial.width + delta.x, minimum.width), maximum.width)
-        let height = min(max(initial.height - delta.y, minimum.height), maximum.height)
-        return NSRect(x: initial.minX, y: initial.maxY - height, width: width, height: height)
+    static func resizedFrame(initial: NSRect, delta: NSPoint, minimum: NSSize, maximum: NSSize, canvas: NSSize = PanelZoom.canvas) -> NSRect {
+        let size = PanelZoom.proposedSize(NSSize(width: initial.width + delta.x, height: initial.height - delta.y),
+                                          from: initial.size, minimum: minimum, maximum: maximum, canvas: canvas)
+        return NSRect(x: initial.minX, y: initial.maxY - size.height, width: size.width, height: size.height)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -281,7 +405,7 @@ final class WindowResizeView: NSView {
             if next.type == .leftMouseUp { break }
             let point = window.convertPoint(toScreen: next.locationInWindow)
             let frame = Self.resizedFrame(initial: initial, delta: NSPoint(x: point.x - start.x, y: point.y - start.y),
-                                          minimum: window.minSize, maximum: window.maxSize)
+                                          minimum: window.minSize, maximum: window.maxSize, canvas: canvasSize)
             window.setFrame(frame, display: true)
         }
     }

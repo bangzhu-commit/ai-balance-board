@@ -185,7 +185,7 @@ struct SetupView: View {
                     Text("每约 5 分钟查一次。唤醒、联网恢复后合并补查，不追赶关机期间的历史次数。")
                     Toggle("保持看板置顶", isOn: Binding(get: { support.alwaysOnTop }, set: { support.setAlwaysOnTop($0) }))
                     Text("关闭置顶后可被其他应用覆盖；从菜单栏可找回看板。")
-                    Text("按住顶部图标、标题或空白处拖动；拖动窗口边缘或右下角调整大小。× 只收起小窗，完全停止监控请从菜单栏退出。")
+                    Text("按住顶部图标、标题或空白处拖动；拖动窗口边缘或右下角等比例缩放文字和卡片，菜单栏可恢复默认大小。× 只收起小窗，完全停止监控请从菜单栏退出。")
                     Text("Grok Bot 需要 Chrome 运行且已登录。不同服务的额度单位与周期分别显示，不相加。")
                 }.font(.callout).padding(8)
             }

@@ -140,7 +140,7 @@ public struct CustomSiteConfig: Codable, Equatable, Sendable {
         guard Self.cleanText(name, max: 50), Self.cleanText(origin, max: 240),
               let url = URLComponents(string: origin), url.scheme == "https",
               let host = url.host, Self.publicHost(host), url.user == nil, url.password == nil,
-              url.query == nil, url.fragment == nil, url.port == nil || url.port == 443,
+              url.query == nil, url.fragment == nil, Self.supportedPort(in: origin, components: url),
               url.path.isEmpty || url.path == "/", !origin.contains("%"), !origin.contains("\\") else {
             throw CustomSiteError.invalidConfiguration("站点必须是公开 HTTPS 域名，不允许本机地址、端口、账号或查询参数")
         }
@@ -189,6 +189,15 @@ public struct CustomSiteConfig: Codable, Equatable, Sendable {
         (allowEmpty || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && text.count <= max &&
             !text.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
     }
+    private static func supportedPort(in origin: String, components: URLComponents) -> Bool {
+        guard components.port == nil || components.port == 443,
+              let separator = origin.range(of: "://") else { return false }
+        let authority = origin[separator.upperBound...].prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+        // Foundation returns nil for both an omitted port and some malformed
+        // numeric ports. Only a truly absent port may use the HTTPS default.
+        return !authority.contains(":") || components.port == 443
+    }
+
     private static func publicHost(_ host: String) -> Bool {
         let host = host.lowercased()
         let forbidden = ["localhost", ".localhost", ".local", ".internal", ".lan", ".home", ".invalid"]

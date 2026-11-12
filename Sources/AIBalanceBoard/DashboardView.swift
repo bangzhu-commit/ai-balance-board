@@ -8,6 +8,29 @@ struct DashboardView: View {
     let onConnect: (ServiceID) -> Void
     let onHide: () -> Void
     var onSettings: () -> Void = {}
+    var canvasSize: NSSize = PanelZoom.canvas
+
+    /// Measure the same cards used by the dashboard, at their logical width.
+    /// The zoom then keeps this layout fixed while the user drags a corner.
+    @MainActor static func preferredLogicalSize(cards: [ServiceCard]) -> NSSize {
+        let cardWidth: CGFloat = 316
+        var cardHeight: CGFloat = 0
+        if cards.isEmpty {
+            let host = NSHostingView(rootView: EmptyDashboardView(onSettings: {})
+                .frame(width: cardWidth).fixedSize(horizontal: false, vertical: true))
+            host.layoutSubtreeIfNeeded()
+            cardHeight = host.fittingSize.height
+        }
+        for card in cards {
+            let host = NSHostingView(rootView: QuotaCardView(card: card, onConnect: {})
+                .frame(width: cardWidth).fixedSize(horizontal: false, vertical: true))
+            host.layoutSubtreeIfNeeded()
+            cardHeight += host.fittingSize.height
+        }
+        // Header 63, footer 35; cards have no vertical outer padding.
+        let natural = 98 + cardHeight + CGFloat(max(0, cards.count - 1)) * 9
+        return NSSize(width: 340, height: min(800, max(240, ceil(natural))))
+    }
 
     private let ink = Color(red: 0.16, green: 0.20, blue: 0.24)
 
@@ -61,13 +84,7 @@ struct DashboardView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 9) {
                     if cards.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "square.stack.3d.up").font(.title)
-                            Text("选择要监控的 AI 服务").font(.headline)
-                            Text("只查询你开启的服务，后台零模型调用。")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Button("开始设置", action: onSettings).buttonStyle(.borderedProminent)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 30)
+                        EmptyDashboardView(onSettings: onSettings)
                     }
                     ForEach(cards) { card in
                         QuotaCardView(card: card, onConnect: { onConnect(card.id) })
@@ -79,7 +96,7 @@ struct DashboardView: View {
 
             HStack(spacing: 5) {
                 Image(systemName: "clock").font(.system(size: 9))
-                Text(cards.isEmpty ? "拖标题移动 · 右下角缩放" : "每 5 分钟刷新 · 拖标题移动 · 右下角缩放")
+                Text(cards.isEmpty ? "拖标题移动 · 右下角等比缩放" : "每 5 分钟刷新 · 拖标题移动 · 右下角等比缩放")
                     .font(.system(size: 9))
                 Spacer(minLength: 0)
             }
@@ -89,7 +106,7 @@ struct DashboardView: View {
             .padding(.vertical, 12)
         }
         .foregroundStyle(ink)
-        .frame(minWidth: 300, maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
+        .frame(width: canvasSize.width, height: canvasSize.height)
         .background(Color(red: 0.94, green: 0.95, blue: 0.94).opacity(0.98))
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.85), lineWidth: 1))
@@ -97,6 +114,21 @@ struct DashboardView: View {
     }
 
 
+}
+
+/// Shared with natural-height measurement so the first-run action is never
+/// sized from a different layout than the visible empty board.
+private struct EmptyDashboardView: View {
+    let onSettings: () -> Void
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "square.stack.3d.up").font(.title)
+            Text("选择要监控的 AI 服务").font(.headline)
+            Text("只查询你开启的服务，后台零模型调用。")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("开始设置", action: onSettings).buttonStyle(.borderedProminent)
+        }.frame(maxWidth: .infinity).padding(.vertical, 30)
+    }
 }
 
 private struct QuotaCardView: View {

@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'release'
 APP = ROOT / 'dist' / 'AI 额度看板.app'
-VERSION = '0.6.0'
+VERSION = '0.7.0'
 FILES = ('README.md', 'LICENSE', 'Package.swift', '.gitignore')
 TREES = {
     'Sources': {'.swift'},
@@ -78,8 +78,8 @@ def write_zip(destination, entries):
 
 def main():
     info = plistlib.loads((APP / 'Contents/Info.plist').read_bytes())
-    if (info.get('CFBundleIdentifier'), info.get('CFBundleShortVersionString'), info.get('CFBundleVersion')) != ('local.outlier.ai-balance-board', VERSION, '8'):
-        raise SystemExit('Build v0.6.0/build8 before packaging')
+    if (info.get('CFBundleIdentifier'), info.get('CFBundleShortVersionString'), info.get('CFBundleVersion')) != ('local.outlier.ai-balance-board', VERSION, '9'):
+        raise SystemExit('Build v0.7.0/build9 before packaging')
     subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(APP)], check=True)
     for name in ('manifest.json', 'background.js', 'content.js', 'protocol.js', 'popup.html', 'popup.js', 'popup.css'):
         if not (APP / 'Contents/Resources/browser-extension' / name).is_file():

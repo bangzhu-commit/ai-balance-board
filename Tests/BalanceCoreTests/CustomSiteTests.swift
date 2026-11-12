@@ -43,9 +43,20 @@ struct CustomSiteTests {
     func testRestrictedOriginsPathsAndSelectors() throws {
         let origins = ["http://relay.example.com", "https://localhost", "https://foo.local", "https://host.internal",
                        "https://127.0.0.1", "https://2130706433", "https://[::1]", "https://a:b@relay.example.com",
-                       "https://relay.example.com:8443", "https://relay.example.com/path", "https://relay.example.com?q=1",
+                       "https://relay.example.com:8443", "https://relay.example.com:999999999999999999999999",
+                       "https://relay.example.com:", "https://relay.example.com:443x",
+                       "https://relay.example.com/path", "https://relay.example.com?q=1",
                        "https://relay.example.com#x", "https://relay.example.com\\evil", "https://-a.example.com"]
-        for origin in origins { var c = config(); c.origin = origin; expectThrowsError(try c.validate()) }
+        for origin in origins {
+            var c = config(); c.origin = origin
+            expectThrowsError(try c.validate())
+            expectThrowsError(try CustomSiteConfig.decode(data: JSONEncoder().encode(c)))
+        }
+        for origin in ["https://relay.example.com", "https://relay.example.com:443", "https://relay.example.com:443/"] {
+            var c = config(); c.origin = origin
+            try c.validate()
+            expectEqual(try CustomSiteConfig.decode(data: JSONEncoder().encode(c)).origin, origin)
+        }
         let paths = ["https://other.example.com/quota", "//other.example.com/quota", "/api?token=secret", "/api#x",
                      "/api/../quota", "/api/%2e%2e/quota", "/v1/chat/completions", "/v1/responses",
                      "/api/payment", "/api/recharge", "/api/delete", "/api/logout", "/bad path"]

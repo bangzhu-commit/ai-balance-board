@@ -78,6 +78,12 @@ enum TestMain {
         TestResults.run("工具目录：展示入口不自动创建服务") { catalog.testCatalogKeepsUserChoicesSeparateFromServiceIdentifiers() }
         TestResults.run("工具目录：内置账号来源与产品名称明确") { catalog.testNativeMappingDoesNotConflateProductNamesAndQuotaSources() }
 
+        let siteOnboarding = SiteOnboardingTests()
+        TestResults.run("网址向导：页面链接归一到同一站点") { try siteOnboarding.testPageLinksNormalizeToTheSameOrigin() }
+        TestResults.run("网址向导：丢弃敏感路径参数且错误不回显") { try siteOnboarding.testSensitiveComponentsAreDiscardedWithoutEcho() }
+        TestResults.run("网址向导：拒绝不支持与歧义地址") { siteOnboarding.testUnsupportedAndAmbiguousAddressesAreRejected() }
+        TestResults.run("网址向导：默认名称符合配置长度") { try siteOnboarding.testDefaultNameRemainsWithinConfigLimits() }
+
         TestResults.printSummary()
         exit(TestResults.failures.isEmpty ? EXIT_SUCCESS : EXIT_FAILURE)
     }

@@ -42,16 +42,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var setup: SetupWindowController!
     func applicationDidFinishLaunching(_ notification: Notification) {
         store = BalanceStore()
-        panel = PanelController(content: dashboard())
+        let canvasSize = DashboardView.preferredLogicalSize(cards: store.visibleCards)
+        panel = PanelController(content: dashboard(canvasSize: canvasSize), canvasSize: canvasSize)
         setup = SetupWindowController(store: store, onFinish: { [weak self] in self?.panel.show() })
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.panel.update(content: self.dashboard())
+            let canvasSize = DashboardView.preferredLogicalSize(cards: self.store.visibleCards)
+            self.panel.update(content: self.dashboard(canvasSize: canvasSize), canvasSize: canvasSize)
         }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "gauge.with.dots.needle.33percent", accessibilityDescription: "AI 额度看板")
         let menu = NSMenu()
-        for (title, action, key) in [("显示看板", #selector(showPanel), ""), ("置顶显示", #selector(toggleAlwaysOnTop), ""), ("隐藏看板", #selector(hidePanel), ""), ("恢复看板位置与大小", #selector(resetPanelPosition), ""), ("服务与设置…", #selector(showSettings), ","), ("刷新额度", #selector(refresh), "r")] {
+        for (title, action, key) in [("显示看板", #selector(showPanel), ""), ("置顶显示", #selector(toggleAlwaysOnTop), ""), ("隐藏看板", #selector(hidePanel), ""), ("恢复默认大小", #selector(resetPanelSize), ""), ("恢复看板位置与大小", #selector(resetPanelPosition), ""), ("服务与设置…", #selector(showSettings), ","), ("刷新额度", #selector(refresh), "r")] {
             let entry = NSMenuItem(title: title, action: action, keyEquivalent: key); entry.target = self; menu.addItem(entry)
         }
         menu.addItem(.separator())
@@ -73,14 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.start()
         if !store.setupCompleted { setup.show() }
     }
-    private func dashboard() -> AnyView {
+    private func dashboard(canvasSize: NSSize) -> AnyView {
         AnyView(DashboardView(cards: store.visibleCards, isRefreshing: store.isRefreshing,
                              onRefresh: { [weak self] in self?.store.refresh() },
                              onConnect: { [weak self] id in
                                  if id == .foxcode || id.customUUID != nil { self?.store.connect(id) } else { self?.setup.show() }
                              },
                              onHide: { [weak self] in self?.panel.hide() },
-                             onSettings: { [weak self] in self?.setup.show() }))
+                             onSettings: { [weak self] in self?.setup.show() }, canvasSize: canvasSize))
     }
     @objc private func showPanel() { panel.show() }
     @objc private func hidePanel() { panel.hide() }
@@ -88,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.items.first(where: { $0.action == #selector(toggleAlwaysOnTop) })?.state = panel.alwaysOnTop ? .on : .off
     }
+    @objc private func resetPanelSize() { panel.resetSize() }
     @objc private func resetPanelPosition() { panel.resetPosition() }
     @objc private func refresh() { store.refresh() }
     @objc private func showSettings() { setup.show() }
