@@ -70,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let mainQuit = NSMenuItem(title: "退出 AI 额度看板", action: #selector(quitApp), keyEquivalent: "q")
         mainQuit.target = self; appMenu.addItem(mainQuit)
         appMenuItem.submenu = appMenu
+        let editMenuItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+        editMenuItem.submenu = AppMenus.makeEditMenu()
+        mainMenu.addItem(editMenuItem)
         NSApp.mainMenu = mainMenu
         panel.show()
         store.start()

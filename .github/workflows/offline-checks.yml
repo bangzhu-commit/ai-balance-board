@@ -34,5 +34,6 @@ jobs:
           zsh scripts/test-store.sh
           zsh scripts/test-panel.sh
           zsh scripts/test-site-wizard.sh
+          zsh scripts/test-edit-menu.sh
       - name: Validate package contents and checksums locally
         run: python3 scripts/package-preview.py
