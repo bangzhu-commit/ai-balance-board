@@ -31,7 +31,9 @@ struct RenderFixture: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.white
-            Text("87%").font(.system(size: 40, weight: .bold)).foregroundColor(.black)
+            // Isolate glyph ink from native button labels, whose colors vary
+            // across macOS appearances. Keep the normal system font renderer.
+            Text("87%").font(.system(size: 40, weight: .bold)).foregroundColor(Color(red: 1, green: 0, blue: 1))
                 .frame(width: 140, height: 60).offset(x: 30, y: 90)
             RoundedRectangle(cornerRadius: 12).fill(Color(red: 0, green: 0, blue: 1)).frame(width: 240, height: 90).offset(x: 30, y: 160)
             FixtureButton(counter: counter).frame(width: 100, height: 30).offset(x: 30, y: 280)
@@ -166,7 +168,8 @@ struct PanelChecks {
             var minX = bitmap.pixelsWide, minY = bitmap.pixelsHigh, maxX = -1, maxY = -1
             for y in 0..<bitmap.pixelsHigh {
                 for x in 0..<bitmap.pixelsWide {
-                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.8, predicate(color) {
+                    // Use a fixed color space, not the runner display profile.
+                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB), color.alphaComponent > 0.8, predicate(color) {
                         minX = min(minX, x); minY = min(minY, y); maxX = max(maxX, x); maxY = max(maxY, y)
                     }
                 }
@@ -178,7 +181,10 @@ struct PanelChecks {
             let bitmap = try snapshot(scale)
             let blue = pixelBounds(bitmap) { $0.blueComponent > 0.7 && $0.redComponent < 0.2 && $0.greenComponent < 0.4 }
             let red = pixelBounds(bitmap) { $0.redComponent > 0.7 && $0.greenComponent < 0.3 && $0.blueComponent < 0.3 }
-            let text = pixelBounds(bitmap) { $0.redComponent < 0.15 && $0.greenComponent < 0.15 && $0.blueComponent < 0.15 }
+            let text = pixelBounds(bitmap) { $0.redComponent > 0.7 && $0.greenComponent < 0.15 && $0.blueComponent > 0.7 }
+            let diagnostics = "Panel pixels: scale=\(scale), image=\(bitmap.pixelsWide)x\(bitmap.pixelsHigh), backing=\(renderWindow.backingScaleFactor), glyph=\(text), reference=\(String(describing: reference?.text))\n"
+            // stderr stays visible in CI even when the next assertion aborts.
+            FileHandle.standardError.write(Data(diagnostics.utf8))
             check(blue.width > 0 && red.width > 0 && text.width > 0, "Real SwiftUI shapes, text and bottom sentinel all render")
             if let ref = reference {
                 let imageRatio = CGFloat(bitmap.pixelsWide) / CGFloat(ref.width)
