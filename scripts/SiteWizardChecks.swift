@@ -100,6 +100,30 @@ struct SiteWizardChecks {
         let editing = CustomSiteEditorModel(record: CustomSiteRecord(config: existingConfig))
         check(editing.reviewedConfig == existingConfig && !editing.canSave, "Existing config previews without silently approving edit")
 
+        let navigation = SetupNavigation(step: 0)
+        let connectionList = CustomSitesState()
+        let firstSite = UUID(), secondSite = UUID()
+        connectionList.expandedSiteID = firstSite
+        connectionList.editorSaved(secondSite)
+        check(navigation.step == 0 && navigation.customSiteFocus == nil && connectionList.expandedSiteID == firstSite,
+              "Saving does not replace the sheet presenter or expand the list before dismissal")
+        if let saved = connectionList.editorDismissed() { navigation.continueWithCustomSite(saved) }
+        check(navigation.step == 1 && navigation.customSiteFocus?.siteID == secondSite && connectionList.expandedSiteID == secondSite,
+              "Dismissal continues at the connection step and targets the saved connection")
+        let previousFocus = navigation.customSiteFocus
+        check(connectionList.editorDismissed() == nil, "A consumed save cannot navigate twice")
+        check(navigation.customSiteFocus == previousFocus, "Dismissal without a save preserves the current destination")
+        connectionList.editorSaved(secondSite)
+        if let saved = connectionList.editorDismissed() { navigation.continueWithCustomSite(saved) }
+        check(navigation.step == 1 && navigation.customSiteFocus?.siteID == secondSite && navigation.customSiteFocus != previousFocus,
+              "Editing the same connection stays on the connection step and requests fresh positioning")
+        let standalone = CustomSitesState()
+        standalone.editorSaved(firstSite)
+        check(standalone.editorDismissed() == firstSite && standalone.expandedSiteID == firstSite,
+              "A standalone connection list can expand its saved row without setup navigation")
+        check(standalone.editorDismissed() == nil && standalone.expandedSiteID == firstSite,
+              "Cancelling a later editor leaves the previously expanded row unchanged")
+
         let dropped = CustomSiteEditorModel(record: nil, kind: .website)
         let item = NSItemProvider()
         item.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier, visibility: .all) { completion in

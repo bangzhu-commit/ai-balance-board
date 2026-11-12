@@ -37,7 +37,7 @@ enum CustomSiteAgentGuide {
         说明：https://github.com/bangzhu-commit/ai-balance-board/blob/main/docs/custom-sites.md
 
         1. 先核实你是否具备浏览器/Computer Use 能力。优先使用后台浏览器或只读接口；需要前台、鼠标键盘时，先与我协调操作窗口。只操作我授权的目标网站；登录、验证码和系统权限由我本人完成。
-        2. 查找正常额度页面使用的只读查询接口，或使用稳定 CSS 选择器读取页面 textContent。先确认接口无修改、充值、兑换或模型调用副作用；找不到可靠来源时说明限制，不猜测。
+        2. 查找正常额度页面使用的只读查询接口，或使用稳定 CSS 选择器读取页面 textContent。先确认接口无修改、充值、兑换或模型调用副作用；找不到可靠来源时说明限制，不猜测。还要核对未登录、加载中和请求失败时的表现；若网页把这些状态显示成数字 0，且固定规则无法与真实零额度区分，不要交付 DOM 配置，应寻找带明确成功标记的 JSON 来源；找不到时说明暂不支持。
         3. 只支持同一个 HTTPS origin 的相对路径。配置不允许请求头、请求体、查询参数、跨站地址、JavaScript、shell、正则表达式或任何任意代码。不读取、复制或导出 Cookie、密码、API key。登录状态保留在看板独立的浏览器会话中。
         4. JSON 模式：mode=json，requestPath 是已确认的 GET 额度接口，value/total 使用 JSON Pointer（如 /data/balance）。DOM 模式：mode=dom，省略 requestPath/success，value/total 使用 CSS 选择器（如 #remaining）。每个选择器应只匹配一个明确的数字元素。
         5. 每项指标包含 id、label、unit、meaning、value；meaning 仅 balance/remaining/used。直接读取时 operation=value；从总额减去已用时 operation=remaining，并提供 total。multiplier 为已核实的单位换算倍率；prefix/suffix 只能用于去掉明确的数字前后缀。不要把已用当剩余、不要混加币种或周期、不要凭空推算重置时间。数组汇总仅支持 schemaVersion=2、mode=json，并必须设置 success 成功标记；metric.collection.path 指向数组，可用 filter 的 path/equals/negate 做固定筛选。此时 value/total 指向每个数组项内的字段，分别求和后执行原来的固定运算；不要使用固定数组下标代替完整汇总。不能汇总百分比，也不支持表达式或任意代码。

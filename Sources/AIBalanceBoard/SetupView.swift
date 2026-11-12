@@ -2,12 +2,6 @@ import AppKit
 import SwiftUI
 import BalanceCore
 
-@MainActor
-private final class SetupNavigation: ObservableObject {
-    @Published var step: Int
-    init(step: Int) { self.step = step }
-}
-
 struct SetupView: View {
     @ObservedObject var store: BalanceStore
     @StateObject private var support = SetupSupportModel()
@@ -45,8 +39,10 @@ struct SetupView: View {
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
                 }
-                .onChange(of: store.customSites.count) { previous, current in
-                    if current > previous { proxy.scrollTo("custom-connections", anchor: .top) }
+                .onPreferenceChange(CustomSiteFocusPreferenceKey.self) { request in
+                    // The expanded target reports only after it has a nonzero layout size.
+                    guard let request, request == navigation.customSiteFocus else { return }
+                    proxy.scrollTo(request.siteID, anchor: .top)
                 }
             }
             Divider()
@@ -81,7 +77,7 @@ struct SetupView: View {
     }
 
     private var serviceSelection: some View {
-        CustomSitesView(store: store, showsCatalog: true)
+        CustomSitesView(store: store, showsCatalog: true, onSaved: navigation.continueWithCustomSite)
     }
 
     private var connections: some View {
@@ -117,7 +113,7 @@ struct SetupView: View {
                     }.padding(8)
                 }
             }
-            CustomSitesView(store: store)
+            CustomSitesView(store: store, focus: navigation.customSiteFocus, onSaved: navigation.continueWithCustomSite)
         }
     }
 

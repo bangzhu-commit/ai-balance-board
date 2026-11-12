@@ -3,22 +3,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 import BalanceCore
 
-private struct CustomSiteEditorRequest: Identifiable {
-    let id = UUID()
-    let record: CustomSiteRecord?
-    var seedName = ""
-    var kind: CustomConnectionKind = .aiTool
-}
-
-@MainActor
-private final class CustomSitesState: ObservableObject {
-    @Published var editor: CustomSiteEditorRequest?
-    @Published var expandedSiteID: UUID?
-}
-
 struct CustomSitesView: View {
     @ObservedObject var store: BalanceStore
     var showsCatalog = false
+    var focus: CustomSiteFocus?
+    var onSaved: (UUID) -> Void = { _ in }
     @StateObject private var state = CustomSitesState()
 
     var body: some View {
@@ -29,10 +18,15 @@ struct CustomSitesView: View {
             }
             savedConnections
         }
-        .sheet(item: $state.editor) { request in
-            CustomSiteEditor(store: store, record: request.record, seedName: request.seedName, kind: request.kind) {
-                state.expandedSiteID = $0
-            }
+        .sheet(item: $state.editor, onDismiss: {
+            // Changing the setup step before the sheet closes would remove its presenter.
+            if let id = state.editorDismissed() { onSaved(id) }
+        }) { request in
+            CustomSiteEditor(store: store, record: request.record, seedName: request.seedName, kind: request.kind,
+                             onSaved: state.editorSaved)
+        }
+        .onChange(of: focus, initial: true) { _, request in
+            if let request { state.expandedSiteID = request.siteID }
         }
     }
 
@@ -122,6 +116,15 @@ struct CustomSitesView: View {
                                   expanded: Binding(get: { state.expandedSiteID == record.id },
                                                     set: { state.expandedSiteID = $0 ? record.id : nil }),
                                   onEdit: { state.editor = CustomSiteEditorRequest(record: record) })
+                        .id(record.id)
+                        .background {
+                            if let focus, focus.siteID == record.id, state.expandedSiteID == record.id {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(key: CustomSiteFocusPreferenceKey.self,
+                                                           value: geometry.size.height > 0 ? focus : nil)
+                                }
+                            }
+                        }
                 }
                 if store.customSites.count >= 12 {
                     Text("最多保存 12 个自定义连接，请先移除不再使用的连接。")
@@ -199,7 +202,7 @@ struct CustomSiteRow: View {
                     Toggle("后台自动查询", isOn: Binding(get: { isEnabled }, set: { store.setEnabled($0, for: id) }))
                         .toggleStyle(.switch).font(.callout)
                 } else {
-                    Text("尚未开启自动查询。测试成功并核对后才能启用；更换配置后需要重新测试。")
+                    Text("配置已保存，尚未开启自动查询。下一步：打开登录窗口 → 测试连接 → 核对并开启监控。更换配置后需要重新测试。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let card = store.card(for: id), isConfirmed {

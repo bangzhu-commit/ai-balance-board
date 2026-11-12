@@ -8,5 +8,6 @@ swiftc -swift-version 5 -target arm64-apple-macosx14.0 -module-cache-path "$buil
   Sources/BalanceCore/*.swift -emit-module-path "$build_dir/BalanceCore.swiftmodule" -o "$build_dir/libBalanceCore.a"
 swiftc -swift-version 5 -target arm64-apple-macosx14.0 -module-cache-path "$build_dir/module-cache" \
   -parse-as-library -I "$build_dir" -L "$build_dir" -lBalanceCore \
-  Sources/AIBalanceBoard/CustomSiteEditorModel.swift scripts/SiteWizardChecks.swift -o "$build_dir/SiteWizardChecks"
+  Sources/AIBalanceBoard/CustomSiteEditorModel.swift Sources/AIBalanceBoard/CustomSiteNavigation.swift \
+  scripts/SiteWizardChecks.swift -o "$build_dir/SiteWizardChecks"
 "$build_dir/SiteWizardChecks"
