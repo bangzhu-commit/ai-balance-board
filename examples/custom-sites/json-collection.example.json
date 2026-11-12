@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "name": "示例订阅额度",
+  "origin": "https://quota.example.com",
+  "loginPath": "/login",
+  "pagePath": "/dashboard",
+  "mode": "json",
+  "requestPath": "/api/usage",
+  "success": {
+    "path": "/success",
+    "equals": true
+  },
+  "metrics": [
+    {
+      "id": "prepaid",
+      "label": "预付费剩余",
+      "unit": "额度",
+      "meaning": "remaining",
+      "operation": "remaining",
+      "value": "/used",
+      "total": "/limit",
+      "collection": {
+        "path": "/data/plans",
+        "filter": {
+          "path": "/kind",
+          "equals": "prepaid"
+        }
+      }
+    }
+  ]
+}

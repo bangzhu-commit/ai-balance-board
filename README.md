@@ -2,11 +2,11 @@
 
 macOS 桌面悬浮看板，集中查看 AI 工具的最近额度。后台按约 5 分钟刷新，登录、唤醒和网络恢复后合并补查；查询不调用模型，不消耗模型推理 token。
 
-**[下载 Mac 应用 v0.7.1](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.7.1/AI-Balance-Board-0.7.1-macos-arm64.zip)** · [版本详情](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.7.1) · [SHA256 校验文件](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.7.1/SHA256SUMS.txt)
+**[下载 Mac 应用 v0.7.2](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.7.2/AI-Balance-Board-0.7.2-macos-arm64.zip)** · [版本详情](https://github.com/bangzhu-commit/ai-balance-board/releases/tag/v0.7.2) · [SHA256 校验文件](https://github.com/bangzhu-commit/ai-balance-board/releases/download/v0.7.2/SHA256SUMS.txt)
 
 **普通用户请选择上方应用 ZIP，不要下载 GitHub 的 “Source code”。** 仅支持 Apple Silicon（M 系列芯片）、macOS 14 或更新版本，不支持 Intel Mac。
 
-v0.7.1 为预览版。应用使用 ad-hoc 签名，尚无 Developer ID 签名、公证或自动更新；macOS 可能阻止打开下载包。首次提示“无法验证开发者”时，确认下载来源及校验值后，可按[首次拦截处理步骤](docs/installation.md#首次打开被-macos-拦截)在系统设置中为这个 app 授权；若提示损坏或恶意软件，请停止安装。不要关闭 Gatekeeper 等系统防护。项目采用 [MIT License](LICENSE)。
+v0.7.2 为预览版。应用使用 ad-hoc 签名，尚无 Developer ID 签名、公证或自动更新；macOS 可能阻止打开下载包。首次提示“无法验证开发者”时，确认下载来源及校验值后，可按[首次拦截处理步骤](docs/installation.md#首次打开被-macos-拦截)在系统设置中为这个 app 授权；若提示损坏或恶意软件，请停止安装。不要关闭 Gatekeeper 等系统防护。项目采用 [MIT License](LICENSE)。
 
 ## 新用户：下载与开始
 

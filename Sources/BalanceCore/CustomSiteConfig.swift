@@ -43,6 +43,41 @@ public struct CustomSiteSuccess: Codable, Equatable, Sendable {
     }
 }
 
+/// A typed comparison over each array item; never an executable expression.
+public struct CustomCollectionFilter: Codable, Equatable, Sendable {
+    public var path: String
+    public var equals: CustomJSONScalar
+    public var negate: Bool
+    public init(path: String, equals: CustomJSONScalar, negate: Bool = false) {
+        self.path = path; self.equals = equals; self.negate = negate
+    }
+    enum CodingKeys: String, CodingKey { case path, equals, negate }
+    public init(from decoder: Decoder) throws {
+        try rejectUnknownKeys(decoder, allowed: ["path", "equals", "negate"])
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        path = try box.decode(String.self, forKey: .path)
+        equals = try box.decode(CustomJSONScalar.self, forKey: .equals)
+        negate = box.contains(.negate) ? try box.decode(Bool.self, forKey: .negate) : false
+    }
+}
+
+/// Fixed JSON array summation. Metric value/total pointers are relative to each item.
+public struct CustomMetricCollection: Codable, Equatable, Sendable {
+    public static let maxItems = 1_000
+    public var path: String
+    public var filter: CustomCollectionFilter?
+    public init(path: String, filter: CustomCollectionFilter? = nil) {
+        self.path = path; self.filter = filter
+    }
+    enum CodingKeys: String, CodingKey { case path, filter }
+    public init(from decoder: Decoder) throws {
+        try rejectUnknownKeys(decoder, allowed: ["path", "filter"])
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        path = try box.decode(String.self, forKey: .path)
+        filter = box.contains(.filter) ? try box.decode(CustomCollectionFilter.self, forKey: .filter) : nil
+    }
+}
+
 public struct CustomSiteMetric: Codable, Equatable, Sendable {
     public var id: String
     public var label: String
@@ -55,16 +90,18 @@ public struct CustomSiteMetric: Codable, Equatable, Sendable {
     public var multiplier: Double
     public var prefix: String
     public var suffix: String
+    public var collection: CustomMetricCollection?
 
     public init(id: String, label: String, unit: String, meaning: CustomMetricMeaning, value: String,
                 total: String? = nil, operation: CustomMetricOperation = .value, multiplier: Double = 1,
-                prefix: String = "", suffix: String = "") {
+                prefix: String = "", suffix: String = "", collection: CustomMetricCollection? = nil) {
         self.id = id; self.label = label; self.unit = unit; self.meaning = meaning; self.value = value
         self.total = total; self.operation = operation; self.multiplier = multiplier; self.prefix = prefix; self.suffix = suffix
+        self.collection = collection
     }
-    enum CodingKeys: String, CodingKey { case id, label, unit, meaning, value, total, operation, multiplier, prefix, suffix }
+    enum CodingKeys: String, CodingKey { case id, label, unit, meaning, value, total, operation, multiplier, prefix, suffix, collection }
     public init(from decoder: Decoder) throws {
-        try rejectUnknownKeys(decoder, allowed: ["id", "label", "unit", "meaning", "value", "total", "operation", "multiplier", "prefix", "suffix"])
+        try rejectUnknownKeys(decoder, allowed: ["id", "label", "unit", "meaning", "value", "total", "operation", "multiplier", "prefix", "suffix", "collection"])
         let box = try decoder.container(keyedBy: CodingKeys.self)
         id = try box.decode(String.self, forKey: .id); label = try box.decode(String.self, forKey: .label)
         unit = try box.decode(String.self, forKey: .unit); meaning = try box.decode(CustomMetricMeaning.self, forKey: .meaning)
@@ -73,6 +110,7 @@ public struct CustomSiteMetric: Codable, Equatable, Sendable {
         multiplier = try box.decodeIfPresent(Double.self, forKey: .multiplier) ?? 1
         prefix = try box.decodeIfPresent(String.self, forKey: .prefix) ?? ""
         suffix = try box.decodeIfPresent(String.self, forKey: .suffix) ?? ""
+        collection = box.contains(.collection) ? try box.decode(CustomMetricCollection.self, forKey: .collection) : nil
     }
 }
 
@@ -126,7 +164,7 @@ public struct CustomSiteConfig: Codable, Equatable, Sendable {
             }
             guard let rows = root["metrics"] as? [[String: Any]] else { throw CustomSiteError.invalidConfiguration("需要额度字段列表") }
             for row in rows {
-                try strictKeys(row, allowed: ["id", "label", "unit", "meaning", "value", "total", "operation", "multiplier", "prefix", "suffix"])
+                try strictKeys(row, allowed: ["id", "label", "unit", "meaning", "value", "total", "operation", "multiplier", "prefix", "suffix", "collection"])
             }
             let config = try JSONDecoder().decode(CustomSiteConfig.self, from: data)
             try config.validate()
@@ -136,7 +174,7 @@ public struct CustomSiteConfig: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard schemaVersion == 1 else { throw CustomSiteError.invalidConfiguration("不支持的配置版本") }
+        guard schemaVersion == 1 || schemaVersion == 2 else { throw CustomSiteError.invalidConfiguration("不支持的配置版本") }
         guard Self.cleanText(name, max: 50), Self.cleanText(origin, max: 240),
               let url = URLComponents(string: origin), url.scheme == "https",
               let host = url.host, Self.publicHost(host), url.user == nil, url.password == nil,
@@ -169,6 +207,26 @@ public struct CustomSiteConfig: Codable, Equatable, Sendable {
             }
             if metric.operation == .remaining && (metric.total == nil || metric.meaning != .remaining) {
                 throw CustomSiteError.invalidConfiguration("总额减已用需要 total，且 meaning 必须为 remaining")
+            }
+            if let collection = metric.collection {
+                guard schemaVersion == 2, mode == .json, success != nil, metric.unit != "%" else {
+                    throw CustomSiteError.invalidConfiguration("数组汇总需要版本 2、JSON 模式及成功标记，不能直接汇总百分比")
+                }
+                try Self.validatePointer(collection.path)
+                if let filter = collection.filter {
+                    try Self.validatePointer(filter.path)
+                    switch filter.equals {
+                    case .number(let number):
+                        guard number.isFinite, abs(number) <= 9_007_199_254_740_991 else {
+                            throw CustomSiteError.invalidConfiguration("数组筛选数字无效")
+                        }
+                    case .string(let value):
+                        guard Self.cleanText(value, max: 100, allowEmpty: true) else {
+                            throw CustomSiteError.invalidConfiguration("数组筛选字符串无效")
+                        }
+                    case .bool: break
+                    }
+                }
             }
             for locator in [metric.value, metric.total].compactMap({ $0 }) {
                 if mode == .json { try Self.validatePointer(locator) }

@@ -355,6 +355,7 @@ struct CustomSiteEditor: View {
                 Text(config.origin).font(.callout.monospaced()).textSelection(.enabled)
                 ForEach(config.metrics, id: \.id) { metric in
                     Text("\(metric.label) · \(metric.unit) · \(meaning(metric.meaning))").font(.callout)
+                    if metric.collection != nil { Text("汇总符合条件的多条额度").font(.caption).foregroundStyle(.secondary) }
                 }
                 Toggle("我确认这是要接入的站点，以上额度含义正确", isOn: $state.sourceConfirmed)
                     .font(.callout)

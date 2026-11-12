@@ -13,6 +13,9 @@ public enum CustomSiteParser {
                 guard let value = lookup(success.path, in: root), matches(value, success.equals) else { throw CustomSiteError.invalidReading }
             }
             return try parse(config: config, id: id, at: date) { location, metric in
+                if let collection = metric.collection {
+                    return try sum(location, metric: metric, collection: collection, root: root)
+                }
                 guard let value = lookup(location, in: root) else { throw CustomSiteError.invalidReading }
                 return try number(value, prefix: metric.prefix, suffix: metric.suffix)
             }
@@ -38,7 +41,9 @@ public enum CustomSiteParser {
         let metrics = try config.metrics.map { metric -> BalanceMetric in
             let raw = try value(metric.value, metric)
             let total = try metric.total.map { try value($0, metric) }
-            guard total == nil || total! > 0 else { throw CustomSiteError.invalidReading }
+            if let total {
+                guard metric.collection != nil ? total >= 0 : total > 0 else { throw CustomSiteError.invalidReading }
+            }
             let result: Double
             if metric.operation == .remaining {
                 guard let total, raw >= 0 else { throw CustomSiteError.invalidReading }
@@ -54,7 +59,7 @@ public enum CustomSiteParser {
             }
             var fraction: Double?
             if metric.meaning == .remaining {
-                if let total { fraction = min(1, max(0, result / (total * metric.multiplier))) }
+                if let total, total > 0 { fraction = min(1, max(0, result / (total * metric.multiplier))) }
                 else if metric.unit == "%" { fraction = min(1, max(0, result / 100)) }
             }
             guard let formatted = formatter.string(from: NSNumber(value: result)) else { throw CustomSiteError.invalidReading }
@@ -62,6 +67,46 @@ public enum CustomSiteParser {
         }
         return BalanceReading(service: .custom(id), metrics: metrics, fetchedAt: date,
                               source: config.mode == .json ? "自定义站点（JSON）" : "自定义站点（网页）")
+    }
+
+    private static func sum(_ location: String, metric: CustomSiteMetric,
+                            collection: CustomMetricCollection, root: Any) throws -> Double {
+        guard let items = lookup(collection.path, in: root) as? [Any],
+              items.count <= CustomMetricCollection.maxItems else { throw CustomSiteError.invalidReading }
+        var sum: Double = 0
+        for item in items {
+            guard item is [String: Any] else { throw CustomSiteError.invalidReading }
+            if let filter = collection.filter {
+                guard let candidate = lookup(filter.path, in: item), scalarTypeMatches(candidate, filter.equals) else {
+                    throw CustomSiteError.invalidReading
+                }
+                let equal = matches(candidate, filter.equals)
+                if filter.negate ? equal : !equal { continue }
+            }
+            guard let value = lookup(location, in: item) else { throw CustomSiteError.invalidReading }
+            let number = try number(value, prefix: metric.prefix, suffix: metric.suffix)
+            if location == metric.total || metric.operation == .remaining || metric.meaning == .used {
+                guard number >= 0 else { throw CustomSiteError.invalidReading }
+            }
+            sum += number
+            guard sum.isFinite, abs(sum) <= 9_007_199_254_740_991 else { throw CustomSiteError.invalidReading }
+        }
+        return sum
+    }
+
+    /// Missing/null and mismatched types must fail before a negated comparison.
+    /// Otherwise malformed rows could silently disappear and produce a false zero.
+    private static func scalarTypeMatches(_ value: Any, _ scalar: CustomJSONScalar) -> Bool {
+        switch scalar {
+        case .bool:
+            guard let number = value as? NSNumber else { return false }
+            return CFGetTypeID(number) == CFBooleanGetTypeID()
+        case .number:
+            guard let number = value as? NSNumber else { return false }
+            return CFGetTypeID(number) != CFBooleanGetTypeID() && number.doubleValue.isFinite &&
+                abs(number.doubleValue) <= 9_007_199_254_740_991
+        case .string: return value is String
+        }
     }
 
     private static func lookup(_ pointer: String, in root: Any) -> Any? {

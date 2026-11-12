@@ -74,6 +74,13 @@ enum TestMain {
         TestResults.run("自定义：本机持久化与失败处理") { try custom.testRepositoryPersistenceAndErrors() }
         TestResults.run("自定义：动态调度补查及首次测试去重") { try custom.testDynamicSchedulesAndFreshTestAdoption() }
 
+        let collection = CustomCollectionTests()
+        TestResults.run("自定义汇总：多订阅分组与超额") { try collection.testMultipleGroupsAndOverage() }
+        TestResults.run("自定义汇总：明确空集合与值汇总") { try collection.testExplicitEmptyAndValueAggregation() }
+        TestResults.run("自定义汇总：异常响应不归零") { try collection.testInvalidResponsesNeverBecomeZero() }
+        TestResults.run("自定义汇总：版本与嵌套配置边界") { try collection.testStrictVersionAndNestedConfiguration() }
+        TestResults.run("自定义汇总：过滤类型与转义字段") { try collection.testTypedFilterAndEscapedPointers() }
+
         let catalog = AIToolCatalogTests()
         TestResults.run("工具目录：展示入口不自动创建服务") { catalog.testCatalogKeepsUserChoicesSeparateFromServiceIdentifiers() }
         TestResults.run("工具目录：内置账号来源与产品名称明确") { catalog.testNativeMappingDoesNotConflateProductNamesAndQuotaSources() }

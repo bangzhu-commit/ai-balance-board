@@ -39,7 +39,7 @@ Codex、Claude、WorkBuddy、千问办公、豆包办公、Grok Bot 和 Muse 都
 
 粘贴网址仅用于识别目标域名，不会自动打开网页，也不会把原始链接上传给任何 Agent。点击复制后由你将任务交给所选 Agent。需要依赖路径中的账户标识或登录 token 的来源，应由你本人在浏览器中正常登录，不将这些数据写入配置。
 
-## schemaVersion 1 配置规范
+## 配置规范
 
 文件必须是 UTF-8 JSON，最大 64 KiB。未知字段会被拒绝。示例只是合成模板，没有连接任何实际服务：
 
@@ -48,7 +48,7 @@ Codex、Claude、WorkBuddy、千问办公、豆包办公、Grok Bot 和 Muse 都
 
 | 字段 | 规则 |
 | --- | --- |
-| `schemaVersion` | 固定为整数 `1` |
+| `schemaVersion` | 简单字段为整数 `1`；数组汇总需 `2`（v0.7.2+） |
 | `name` | 看板显示名称，1–50 字符 |
 | `origin` | HTTPS 站点根地址，不含账号、密码、路径、查询参数或片段，例如 `https://relay.example.com` |
 | `loginPath` | 登录页相对路径，例如 `/login` |
@@ -74,7 +74,17 @@ Codex、Claude、WorkBuddy、千问办公、豆包办公、Grok Bot 和 Muse 都
 | `multiplier` | 默认 `1`，将结果乘以明确核实的固定换算倍率；范围 `1e-9` 至 `1e9` |
 | `prefix` / `suffix` | 默认空字符串；仅剥去精确匹配的数字前后缀，例如 DOM 文本 `87%` 对应 `suffix:"%"`。每项最多 20 字符 |
 
-JSON Pointer 支持对象属性、数组固定索引、`~0` / `~1` 转义。没有通配符、循环或求和表达式；需要复杂聚合的服务仍需开发专用适配器。
+JSON Pointer 支持对象属性、数组固定索引、`~0` / `~1` 转义。不接受通配符、循环、表达式或任意代码。
+
+### 多条额度汇总（schemaVersion 2，v0.7.2+）
+
+JSON 指标可加 `collection`：`path` 指向数组；可选 `filter` 包含相对每项的 `path`、标量 `equals` 与默认 `false` 的 `negate`。`value` 和 `total` 也改为相对数组项的 JSON Pointer。看板分别汇总匹配项的数值，再执行 `value` 或 `remaining` 固定运算。相同单位、相同口径的额度才能合计，百分比不允许直接汇总。
+
+例如 `collection: {"path":"/data/plans","filter":{"path":"/kind","equals":"prepaid"}}`，配合 `value:"/used"`、`total:"/limit"`、`operation:"remaining"`，表示预付费计划的总额减已用。完整合成示例见 [JSON 数组汇总](../examples/custom-sites/json-collection.example.json)。
+
+集合配置必须提供 `success` 标记，只支持 JSON 模式；数组最多 1000 项。缺失、null、非数组、筛选字段类型错误、匹配项数字无效或求和溢出均视为失败。只有成功响应中的明确空数组或无匹配项可以得到零；不能把接口失败当作空数组。
+
+旧 schemaVersion 1 配置继续可用；含 schemaVersion 2 连接的配置文件需要 v0.7.2+。回退旧版会暂停自定义连接并保留文件，不要用旧版覆盖或清空这些配置。
 
 DOM 只读取唯一元素的 `textContent`，不读取密码、Cookie、localStorage、任意属性或输入框值；选择器找不到、匹配多个元素或文本不是确定数字时失败。数字支持小数点和规范千位逗号，不猜测欧式小数逗号、“无限”、加载占位符或计算公式。剥离前后缀后必须只剩完整数字。
 
